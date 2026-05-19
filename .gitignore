@@ -1,0 +1,69 @@
+# ──── Python / Django ────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+develop-eggs/
+.installed.cfg
+
+# Virtualenvs
+venv/
+.venv/
+env/
+.env/
+
+# Django
+*.sqlite3
+*.sqlite3-journal
+backend/media/
+backend/staticfiles/
+backend/db.sqlite3
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# ──── Node / Vite / Frontend ────
+node_modules/
+dist/
+.cache/
+.parcel-cache/
+*.tsbuildinfo
+
+# ──── Testing / coverage ────
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+.nyc_output/
+
+# ──── Editors / OS ────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ──── Logs / scratch ────
+*.log
+logs/
+*.pid
+scratch/
+
+# ──── Playwright (Phase 2) ────
+test-results/
+playwright-report/
+playwright/.cache/
+
+# ──── Browser extension build (Phase 2) ────
+extension/dist/
+extension/build/

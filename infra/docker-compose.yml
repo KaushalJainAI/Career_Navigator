@@ -1,0 +1,62 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: career_navigator
+      POSTGRES_USER: cn
+      POSTGRES_PASSWORD: cn
+    ports: ['5432:5432']
+    volumes: ['pg_data:/var/lib/postgresql/data']
+
+  redis:
+    image: redis:7-alpine
+    ports: ['6379:6379']
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../infra/backend.Dockerfile
+    env_file: ../backend/.env
+    environment:
+      DATABASE_URL: postgres://cn:cn@postgres:5432/career_navigator
+      REDIS_URL: redis://redis:6379/0
+      USE_REDIS_CHANNEL_LAYER: 'True'
+    depends_on: [postgres, redis]
+    ports: ['8000:8000']
+    command: >
+      sh -c "python manage.py migrate &&
+             daphne -b 0.0.0.0 -p 8000 config.asgi:application"
+
+  celery:
+    build:
+      context: ../backend
+      dockerfile: ../infra/backend.Dockerfile
+    env_file: ../backend/.env
+    environment:
+      DATABASE_URL: postgres://cn:cn@postgres:5432/career_navigator
+      REDIS_URL: redis://redis:6379/0
+    depends_on: [postgres, redis]
+    command: celery -A config worker -l info
+
+  celery_beat:
+    build:
+      context: ../backend
+      dockerfile: ../infra/backend.Dockerfile
+    env_file: ../backend/.env
+    environment:
+      DATABASE_URL: postgres://cn:cn@postgres:5432/career_navigator
+      REDIS_URL: redis://redis:6379/0
+    depends_on: [postgres, redis]
+    command: celery -A config beat -l info -S django
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    volumes: ['../frontend:/app']
+    ports: ['5173:5173']
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+
+volumes:
+  pg_data:
