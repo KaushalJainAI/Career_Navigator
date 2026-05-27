@@ -6,6 +6,8 @@
 ## Target
 
 - **Host:** `ec2-13-207-61-191.ap-south-1.compute.amazonaws.com` (Mumbai region)
+- **Public hostname:** `career.kaushaljain.com` (Cloudflare A record → 13.207.61.191, proxied / orange cloud)
+- **TLS:** Cloudflare-proxied with a **Cloudflare Origin Certificate** on the EC2 box (Phase 10). Browsers → Cloudflare uses CF's universal cert; Cloudflare → origin uses the origin cert. SSL mode set to **Full (strict)** in the CF dashboard.
 - **AMI assumed:** Amazon Linux 2023 (the `ec2-user` username is the giveaway).
   If `cat /etc/os-release` says Ubuntu, swap `dnf` → `apt` in the commands below.
 - **Deploy style:** **SQLite** + gunicorn + nginx, systemd-managed, on the same single instance. (You earlier picked Postgres; this revision uses SQLite per your latest instruction — simpler, no DB server to operate, fine for one user. Migration to Postgres later is a `dumpdata` / `loaddata` away.)
@@ -26,11 +28,16 @@ If that prints `ec2-user` + the OS name, you're good. If it times out, the EC2 S
 
 Also check the **Security Group** in AWS Console → EC2 → Security Groups. Add inbound rules:
 
-| Type        | Protocol | Port | Source             |
-| ----------- | -------- | ---- | ------------------ |
-| SSH         | TCP      | 22   | My IP              |
-| HTTP        | TCP      | 80   | 0.0.0.0/0          |
-| HTTPS       | TCP      | 443  | 0.0.0.0/0 *(opt.)* |
+| Type        | Protocol | Port | Source                |
+| ----------- | -------- | ---- | --------------------- |
+| SSH         | TCP      | 22   | My IP                 |
+| HTTP        | TCP      | 80   | 0.0.0.0/0             |
+| HTTPS       | TCP      | 443  | 0.0.0.0/0             |
+
+> **Tightening later:** Once Phase 10 is up, port 80 / 443 can be restricted to
+> just Cloudflare's published IP ranges (https://www.cloudflare.com/ips/) so
+> the EC2 origin can't be hit directly, only through CF. This blocks direct-IP
+> abuse and DDoS. Out of scope for the first deploy.
 
 ## Phase 1 — Provision the box
 
@@ -142,8 +149,14 @@ Set at minimum:
 DJANGO_SETTINGS_MODULE=config.settings.prod
 SECRET_KEY=<generated above>
 DEBUG=False
-ALLOWED_HOSTS=ec2-13-207-61-191.ap-south-1.compute.amazonaws.com,13.207.61.191
-CORS_ALLOWED_ORIGINS=http://ec2-13-207-61-191.ap-south-1.compute.amazonaws.com
+# Public hostname first, then internal EC2 names. Cloudflare sends Host: career.kaushaljain.com.
+ALLOWED_HOSTS=career.kaushaljain.com,ec2-13-207-61-191.ap-south-1.compute.amazonaws.com,13.207.61.191
+CORS_ALLOWED_ORIGINS=https://career.kaushaljain.com
+FRONTEND_URL=https://career.kaushaljain.com
+# Force HTTPS redirects + 1-year HSTS. Safe because Cloudflare always terminates HTTPS
+# in front of us; the origin only ever sees X-Forwarded-Proto=https from CF.
+SECURE_SSL_REDIRECT=True
+SECURE_HSTS_SECONDS=31536000
 # Leave DATABASE_URL empty — that activates the SQLite fallback in
 # config/settings/base.py at SQLITE_PATH below.
 DATABASE_URL=
@@ -172,8 +185,8 @@ python manage.py createsuperuser
 ```bash
 cd /opt/career-navigator/frontend
 npm install
-# Bake the EC2 hostname into the build
-VITE_API_BASE=http://ec2-13-207-61-191.ap-south-1.compute.amazonaws.com/api/v1 \
+# Bake the public HTTPS hostname into the build
+VITE_API_BASE=https://career.kaushaljain.com/api/v1 \
   npm run build
 # Output in frontend/dist/ — nginx will serve it.
 ```
@@ -250,12 +263,17 @@ sudo systemctl status cn-backend   # should be 'active (running)'
 
 ## Phase 7 — Nginx reverse proxy
 
-**`/etc/nginx/conf.d/career-navigator.conf`**:
+> **Defer the actual HTTPS listener until Phase 10** — we want the Origin
+> Certificate in place before nginx tries to bind to 443. For now, write the
+> HTTP-only block below. Phase 10 will replace this file with the full HTTPS
+> version.
+
+**`/etc/nginx/conf.d/career-navigator.conf`** (interim, HTTP only):
 
 ```nginx
 server {
     listen 80 default_server;
-    server_name ec2-13-207-61-191.ap-south-1.compute.amazonaws.com;
+    server_name career.kaushaljain.com ec2-13-207-61-191.ap-south-1.compute.amazonaws.com;
     client_max_body_size 25M;
 
     # Frontend SPA
@@ -299,13 +317,17 @@ server {
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Need SELinux on Amazon Linux to allow nginx → proxy to localhost:
+SELinux on Amazon Linux must allow nginx → proxy to localhost:
 
 ```bash
 sudo setsebool -P httpd_can_network_connect 1
 ```
 
-You should now be able to reach `http://ec2-13-207-61-191.ap-south-1.compute.amazonaws.com/` from your browser.
+> While Cloudflare is still set to SSL mode "Flexible" (the default for new
+> proxied records), `https://career.kaushaljain.com/` will already work from
+> the browser side — CF terminates TLS and talks plain HTTP to your origin.
+> That's fine for a smoke test but **not** what we want long-term: it leaves
+> the CF → origin hop unencrypted. Phase 10 fixes that.
 
 ## Phase 8 — Install Claude Code on the EC2 box
 
@@ -360,20 +382,212 @@ ssh -i "my-key.pem" ec2-user@ec2-13-207-61-191.ap-south-1.compute.amazonaws.com 
 
 Drop that into a `claude-remote.ps1` script so you can run it with one command.
 
+## Phase 10 — TLS via Cloudflare Origin Certificate
+
+Goal: HTTPS end-to-end (browser → CF and CF → origin), with CF SSL mode
+**Full (strict)** so Cloudflare validates the origin cert on every request.
+
+### 10.1 Generate the certificate (in Cloudflare dashboard — manual step)
+
+1. Open https://dash.cloudflare.com/ → select **kaushaljain.com**.
+2. Sidebar → **SSL/TLS → Origin Server → Create Certificate**.
+3. Keep defaults:
+   - Generate private key + CSR with Cloudflare ✓
+   - Key type: **RSA (2048)**
+   - Hostnames: `career.kaushaljain.com` (and add `*.kaushaljain.com` if you want one cert to cover future subdomains)
+   - Certificate validity: **15 years**
+4. Click **Create**. You'll see two PEM blocks. **The private key is shown only once** — leave the tab open while you SSH in.
+
+### 10.2 Install the cert on the EC2 box
+
+```bash
+sudo mkdir -p /etc/ssl/cloudflare
+sudo chmod 750 /etc/ssl/cloudflare
+sudo chown root:root /etc/ssl/cloudflare
+
+# Paste the certificate block into:
+sudo nano /etc/ssl/cloudflare/career.kaushaljain.com.pem
+# Paste the private key block into:
+sudo nano /etc/ssl/cloudflare/career.kaushaljain.com.key
+
+sudo chmod 644 /etc/ssl/cloudflare/career.kaushaljain.com.pem
+sudo chmod 600 /etc/ssl/cloudflare/career.kaushaljain.com.key
+```
+
+### 10.3 Fetch Cloudflare's Authenticated Origin Pull root cert (optional but recommended)
+
+This lets you also enable **Authenticated Origin Pulls** later, so the origin
+only accepts connections from Cloudflare:
+
+```bash
+sudo curl -fsSL -o /etc/ssl/cloudflare/cf-authenticated-origin.pem \
+    https://developers.cloudflare.com/ssl/static/authenticated_origin_pull_ca.pem
+```
+
+### 10.4 Replace the nginx config with the HTTPS version
+
+Overwrite `/etc/nginx/conf.d/career-navigator.conf`:
+
+```nginx
+# Cloudflare → origin real-IP restoration so Django sees the real client IP,
+# not Cloudflare's edge IP, in X-Forwarded-For. CF IP ranges:
+# https://www.cloudflare.com/ips/   (refresh occasionally; rare changes)
+set_real_ip_from 173.245.48.0/20;
+set_real_ip_from 103.21.244.0/22;
+set_real_ip_from 103.22.200.0/22;
+set_real_ip_from 103.31.4.0/22;
+set_real_ip_from 141.101.64.0/18;
+set_real_ip_from 108.162.192.0/18;
+set_real_ip_from 190.93.240.0/20;
+set_real_ip_from 188.114.96.0/20;
+set_real_ip_from 197.234.240.0/22;
+set_real_ip_from 198.41.128.0/17;
+set_real_ip_from 162.158.0.0/15;
+set_real_ip_from 104.16.0.0/13;
+set_real_ip_from 104.24.0.0/14;
+set_real_ip_from 172.64.0.0/13;
+set_real_ip_from 131.0.72.0/22;
+set_real_ip_from 2400:cb00::/32;
+set_real_ip_from 2606:4700::/44;
+set_real_ip_from 2803:f800::/32;
+set_real_ip_from 2405:b500::/32;
+set_real_ip_from 2405:8100::/32;
+set_real_ip_from 2a06:98c0::/29;
+set_real_ip_from 2c0f:f248::/32;
+real_ip_header CF-Connecting-IP;
+
+# Redirect any plain-HTTP that gets through to HTTPS.
+server {
+    listen 80 default_server;
+    server_name career.kaushaljain.com ec2-13-207-61-191.ap-south-1.compute.amazonaws.com;
+    return 301 https://career.kaushaljain.com$request_uri;
+}
+
+server {
+    listen 443 ssl http2 default_server;
+    server_name career.kaushaljain.com;
+    client_max_body_size 25M;
+
+    ssl_certificate     /etc/ssl/cloudflare/career.kaushaljain.com.pem;
+    ssl_certificate_key /etc/ssl/cloudflare/career.kaushaljain.com.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    # HSTS — Cloudflare will also send its own; this is the origin response.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Frontend SPA
+    root /opt/career-navigator/frontend/dist;
+    index index.html;
+    location / {
+        try_files $uri /index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # Critical: tell Django that the original request was HTTPS, so
+        # SECURE_SSL_REDIRECT in prod.py doesn't bounce-loop.
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    location /admin/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    location /static/ {
+        alias /opt/career-navigator/backend/staticfiles/;
+    }
+
+    location /ws/ {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+```
+
+Test + reload:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 10.5 Switch Cloudflare SSL mode to Full (strict)
+
+Cloudflare dashboard → **SSL/TLS → Overview** → set mode to **Full (strict)**.
+
+Also under **SSL/TLS → Edge Certificates**:
+
+- **Always Use HTTPS:** ON
+- **Automatic HTTPS Rewrites:** ON
+- **Minimum TLS Version:** 1.2
+- **HTTP Strict Transport Security:** enable with 6-month max-age (you can extend after a week of stable operation)
+
+### 10.6 Smoke-test the chain
+
+From your laptop:
+
+```powershell
+# Should return HTTP/2 200 from CF (cf-ray header present), no certificate warnings.
+curl.exe -I https://career.kaushaljain.com/
+
+# API: returns 401 Unauthorized (proves routing + Django reached, auth required).
+curl.exe -I https://career.kaushaljain.com/api/v1/auth/me/
+
+# Plain HTTP redirects to HTTPS.
+curl.exe -I http://career.kaushaljain.com/
+```
+
+If anything 5xx's: `sudo journalctl -u nginx -n 50` on the box for nginx
+errors, `sudo journalctl -u cn-backend -n 50` for Django errors.
+
+### 10.7 Tighten the env + restart
+
+The `.env` already has `SECURE_SSL_REDIRECT=True` and HSTS from Phase 4.
+Restart so prod.py re-reads them:
+
+```bash
+sudo systemctl restart cn-backend cn-asgi
+```
+
+> **Important about SECURE_SSL_REDIRECT:** prod.py reads
+> `SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')`. The nginx
+> config above sends `X-Forwarded-Proto: https` on every proxied request, so
+> Django correctly identifies the request as secure and the redirect doesn't
+> infinite-loop. If you ever see a redirect loop, that header is the thing to
+> check.
+
 ## Verification checklist
 
 - [ ] `ssh ec2-user@…` from your laptop → lands in shell.
 - [ ] `sudo systemctl status cn-backend cn-asgi cn-celery nginx redis6` → all `active (running)`. (No `postgresql` — we're on SQLite.)
 - [ ] `ls -la /opt/career-navigator/backend/db.sqlite3` → file exists, owned by `ec2-user`.
-- [ ] `curl -I http://13.207.61.191/` → 200 OK with HTML.
-- [ ] `curl http://13.207.61.191/api/v1/auth/me/` → 401 (means routing works, auth is required — expected).
-- [ ] Open `http://ec2-13-207-61-191.ap-south-1.compute.amazonaws.com/` in browser → app loads.
+- [ ] `curl -I https://career.kaushaljain.com/` → 200 OK with HTML, `cf-ray` header present (proves Cloudflare path).
+- [ ] `curl -I http://career.kaushaljain.com/` → 301 redirect to https://.
+- [ ] `curl https://career.kaushaljain.com/api/v1/auth/me/` → 401 (means routing works, auth is required — expected).
+- [ ] Open `https://career.kaushaljain.com/` in browser → app loads with green padlock, no mixed-content warnings.
+- [ ] In CF dashboard, SSL/TLS Overview shows current mode = **Full (strict)** and origin certificate status = **Active**.
 - [ ] On EC2: `claude --version` prints a version; `claude` opens the REPL; `/login` completes; `claude "say hi"` returns a response.
 - [ ] `tmux attach -t claude` works after a fresh SSH login.
 
 ## What's out of scope (do later)
 
-- **HTTPS / Let's Encrypt** — needs a real domain you own pointed at the EC2 IP, then `sudo dnf install certbot python3-certbot-nginx && sudo certbot --nginx -d your.domain`.
+- ~~**HTTPS / Let's Encrypt**~~ — done via Cloudflare Origin Cert in Phase 10. Let's Encrypt direct on the origin is unnecessary while CF terminates TLS in front.
+- **Authenticated Origin Pulls** — Phase 10.3 fetched the CA cert. To finish the lockdown: in CF dashboard SSL/TLS → Origin Server → enable *Authenticated Origin Pulls*, then add `ssl_client_certificate /etc/ssl/cloudflare/cf-authenticated-origin.pem; ssl_verify_client on;` to the nginx 443 server block. Origin will then refuse any request that didn't come through Cloudflare.
+- **Restrict EC2 Security Group to CF IPs only** — replace the `0.0.0.0/0` rules for ports 80/443 with the CF IPv4/IPv6 ranges. Pairs well with Authenticated Origin Pulls.
 - **Backups** — `sqlite3 db.sqlite3 ".backup '/opt/career-navigator/backups/db-$(date +%Y%m%d).sqlite3'"` from a cron job, plus EBS snapshot schedule. Snippet for `/etc/cron.daily/cn-db-backup`:
 
   ```bash
