@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import UserProfile
+from .models import APIToken, UserProfile
 
 User = get_user_model()
 
@@ -44,3 +44,23 @@ class RegisterSerializer(serializers.Serializer):
             last_name=validated_data.get('last_name', ''),
         )
         return user
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True, min_length=8)
+
+
+class APITokenSerializer(serializers.ModelSerializer):
+    """Read-only view of an APIToken. The cleartext token is NEVER echoed here —
+    it is only included in the response of `APITokenListCreateView.post` once."""
+
+    class Meta:
+        model = APIToken
+        fields = ['id', 'name', 'last_used_at', 'created_at', 'revoked_at']
+        read_only_fields = fields

@@ -33,24 +33,26 @@ export function JobDetail() {
     alert('Application created and tailored resume generated.');
   }
 
-  if (!job) return <p>Loading…</p>;
+  if (!job) return <p>Loading...</p>;
   return (
-    <section className="space-y-4">
-      <h1 className="text-2xl font-semibold">{job.title}</h1>
-      <div className="text-slate-600">{job.company?.name}</div>
+    <section className="space-y-5">
+      <div>
+        <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{job.title}</h1>
+        <div className="mt-2 text-sm font-semibold text-slate-600 sm:text-base">{job.company?.name}</div>
+      </div>
       {match && (
-        <div className="bg-white p-3 rounded shadow-sm">
+        <div className="rounded-2xl bg-white p-4 shadow-sm">
           <div className="font-medium">Match score: {(match.score * 100).toFixed(0)}%</div>
           {match.gaps?.length > 0 && (
             <div className="text-sm text-amber-700">Gaps: {match.gaps.join(', ')}</div>
           )}
         </div>
       )}
-      <article className="prose" dangerouslySetInnerHTML={{ __html: job.description }} />
-      <div className="flex gap-2">
-        <button className="bg-indigo-600 text-white px-3 py-2 rounded" onClick={() => apply('assist')}>Assist apply</button>
-        <button className="bg-indigo-600 text-white px-3 py-2 rounded" onClick={() => apply('autofill')}>Autofill</button>
-        <button className="bg-red-600 text-white px-3 py-2 rounded" onClick={() => apply('autonomous')}>Autonomous</button>
+      <article className="prose max-w-none rounded-2xl bg-white p-4 text-sm leading-7 sm:p-5 sm:text-base" dangerouslySetInnerHTML={{ __html: job.description }} />
+      <div className="grid gap-2 sm:flex sm:flex-wrap">
+        <button className="rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white" onClick={() => apply('assist')}>Assist apply</button>
+        <button className="rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white" onClick={() => apply('autofill')}>Autofill</button>
+        <button className="rounded-xl bg-red-600 px-4 py-3 font-bold text-white" onClick={() => apply('autonomous')}>Autonomous</button>
       </div>
     </section>
   );

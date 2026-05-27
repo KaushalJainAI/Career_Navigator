@@ -9,12 +9,15 @@ pytestmark = pytest.mark.django_db
 @pytest.fixture
 def job_factory():
     src = Source.objects.create(name='s', kind='aggregator')
+    counter = {'value': 0}
 
     def make(title='Backend Engineer', company_name='Acme', remote=True, location='Remote',
              salary_max=120000, description='Build microservices with Python and Django'):
+        counter['value'] += 1
         company, _ = Company.objects.get_or_create(name=company_name)
         return JobPosting.objects.create(
-            source=src, external_id=title + company_name, company=company, title=title,
+            source=src, external_id=f'{title}-{company_name}-{counter["value"]}',
+            company=company, title=title,
             description=description, location=location, remote=remote, salary_max=salary_max,
         )
 

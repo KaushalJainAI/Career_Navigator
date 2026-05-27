@@ -26,18 +26,18 @@ export function InterviewGrill() {
 
   if (!sessionId) {
     return (
-      <section className="max-w-lg mx-auto bg-white p-6 rounded shadow space-y-3">
-        <h1 className="text-xl font-semibold">Start an interview grilling session</h1>
-        <input className="w-full border p-2 rounded" value={role} onChange={(e) => setRole(e.target.value)} />
-        <select className="w-full border p-2 rounded" value={stage} onChange={(e) => setStage(e.target.value)}>
+      <section className="mx-auto max-w-lg space-y-4 rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+        <h1 className="text-2xl font-black tracking-tight text-slate-950">Start an interview grilling session</h1>
+        <input className="w-full rounded-xl border border-slate-200 p-3" value={role} onChange={(e) => setRole(e.target.value)} />
+        <select className="w-full rounded-xl border border-slate-200 p-3" value={stage} onChange={(e) => setStage(e.target.value)}>
           {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <button
-          className="bg-indigo-600 text-white px-4 py-2 rounded"
+          className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white sm:w-auto"
           disabled={loading}
           onClick={() => start({ role, stage })}
         >
-          {loading ? 'Researching…' : 'Begin grilling'}
+          {loading ? 'Researching...' : 'Begin grilling'}
         </button>
       </section>
     );
@@ -45,27 +45,25 @@ export function InterviewGrill() {
 
   if (current) {
     return (
-      <section className="max-w-2xl mx-auto bg-white p-6 rounded shadow space-y-3">
-        <div className="text-sm text-slate-500">
-          Question {currentIndex + 1} of {questions.length} · {current.category}
+      <section className="mx-auto max-w-2xl space-y-4 rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+        <div className="text-sm font-semibold text-slate-500">
+          Question {currentIndex + 1} of {questions.length} - {current.category}
         </div>
-        <div className="text-lg font-medium">{current.prompt}</div>
+        <div className="text-lg font-bold leading-7 text-slate-950">{current.prompt}</div>
         <textarea
-          rows={6}
-          className="w-full border p-2 rounded"
+          rows={7}
+          className="w-full rounded-xl border border-slate-200 p-3"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Type your answer…"
+          placeholder="Type your answer..."
         />
-        <div className="flex gap-2">
-          <button className="bg-indigo-600 text-white px-3 py-2 rounded" onClick={onAnswer}>
-            Submit answer
-          </button>
-        </div>
+        <button className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white sm:w-auto" onClick={onAnswer}>
+          Submit answer
+        </button>
         {turns.length > 0 && (
-          <div className="mt-4 text-sm">
-            <div className="font-semibold">Last feedback:</div>
-            <div>{turns[turns.length - 1].feedback}</div>
+          <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm">
+            <div className="font-bold text-slate-800">Last feedback:</div>
+            <div className="mt-1 text-slate-600">{turns[turns.length - 1].feedback}</div>
           </div>
         )}
       </section>
@@ -73,16 +71,16 @@ export function InterviewGrill() {
   }
 
   return (
-    <section className="max-w-2xl mx-auto bg-white p-6 rounded shadow space-y-3">
-      <h2 className="text-xl font-semibold">All questions answered</h2>
-      <button className="bg-indigo-600 text-white px-3 py-2 rounded" onClick={onReport}>
+    <section className="mx-auto max-w-2xl space-y-4 rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+      <h2 className="text-2xl font-black tracking-tight text-slate-950">All questions answered</h2>
+      <button className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white sm:w-auto" onClick={onReport}>
         Generate report
       </button>
       {report && (
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 space-y-2 text-sm leading-6">
           <div>Overall: {(report.overall_score * 100).toFixed(0)}%</div>
           <div>Gaps: {report.gaps.join(', ')}</div>
-          <ul className="list-disc ml-5">
+          <ul className="ml-5 list-disc">
             {report.study_plan.map((p, i) => (
               <li key={i}><strong>{p.topic}</strong>: {p.action}</li>
             ))}

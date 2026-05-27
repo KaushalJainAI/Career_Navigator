@@ -21,7 +21,11 @@ export const useJobsStore = create<JobsState>((set) => ({
   loading: false,
   fetch: async (params = {}) => {
     set({ loading: true });
-    const data = await Jobs.list(params);
-    set({ jobs: data.results ?? data, loading: false });
+    try {
+      const data = await Jobs.list(params);
+      set({ jobs: data.results ?? data, loading: false });
+    } catch {
+      set({ loading: false });
+    }
   },
 }));

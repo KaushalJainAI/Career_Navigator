@@ -13,6 +13,7 @@ Patterned on the AIAAS Django/Channels/Celery + React/Zustand stack and Faultlin
 | [docs/vision.md](docs/vision.md) | You want the product thesis, target user, and design principles. |
 | [docs/architecture.md](docs/architecture.md) | You're orienting on the system: processes, apps, URLs, data flows. |
 | [docs/agent.md](docs/agent.md) | You're touching anything LLM-facing or the autonomous-apply path. |
+| [docs/job-search-skills-workflows-plan.md](docs/job-search-skills-workflows-plan.md) | You want the built-in job search, referral, outreach, and apply-agent workflow plan. |
 | [docs/data-model.md](docs/data-model.md) | You're adding fields, relations, or migrations. |
 | [docs/adapters.md](docs/adapters.md) | You're wiring a new job-discovery source. |
 | [docs/development.md](docs/development.md) | You want to run it locally and know which env keys matter. |
@@ -75,7 +76,7 @@ Every app ships unit tests in `<app>/tests/test_*.py`. Full policy: [docs/testin
 
 ## Apps overview
 
-15 Django apps. Detailed entity model in [docs/data-model.md](docs/data-model.md); detailed orchestration in [docs/agent.md](docs/agent.md).
+16 Django apps. Detailed entity model in [docs/data-model.md](docs/data-model.md); detailed orchestration in [docs/agent.md](docs/agent.md).
 
 | App | Purpose |
 |---|---|
@@ -87,6 +88,7 @@ Every app ships unit tests in `<app>/tests/test_*.py`. Full policy: [docs/testin
 | [`matching`](backend/matching/) | Resume↔JD scorer (lexical + skill-overlap; LLM rerank optional) + MatchScore |
 | [`notifications`](backend/notifications/) | Subscription DSL, Alert, web-push, Channels |
 | [`applications`](backend/applications/) | Application + AutoApplySession (approval token) + ApplicationEvent |
+| [`networking`](backend/networking/) | Contacts, referral opportunities, outreach drafts, consent events, action queue |
 | [`tailoring`](backend/tailoring/) | TailoredResume + CoverLetter generators (LLM-injectable) |
 | [`agent`](backend/agent/) | LangGraph orchestrator + phase-gated tool registry + HITL gates. See [docs/agent.md](docs/agent.md). |
 | [`interview`](backend/interview/) | **Interview Grill Chat Agent** — research → question bank → live grilling → report + study plan |

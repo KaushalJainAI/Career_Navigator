@@ -122,6 +122,29 @@ See [backend/.env.example](../backend/.env.example). Highlights:
 | `VAPID_*` | Web-push notifications. |
 | `STRIPE_*` | Phase 1.5+ billing. |
 
+### Local AI via Codex subscription
+
+For a personal/local deployment you can route AI generation through the official Codex CLI instead of an API key.
+
+```bash
+codex login
+# or on a headless machine
+codex login --device-auth
+```
+
+Then set:
+
+```env
+AI_PROVIDER=codex_cli
+AI_FALLBACK_PROVIDER=nvidia
+CODEX_CLI_COMMAND=codex
+CODEX_CLI_SANDBOX=read-only
+CODEX_CLI_TIMEOUT_SECONDS=120
+NVIDIA_API_KEY=...
+```
+
+This powers the current tailoring and interview-prep LLM hooks through `codex exec`, with NVIDIA NIM as the fallback when Codex is unavailable or returns an empty result. Keep this for local/personal use: subscription credentials are personal, rate-limited, and not suitable for a shared SaaS deployment.
+
 ### Env keys (frontend)
 
 See [frontend/.env.example](../frontend/.env.example):

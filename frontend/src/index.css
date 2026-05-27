@@ -1,3 +1,90 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .glass-panel {
+    @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-glass;
+  }
+}
+
+body {
+  @apply bg-[#f7f4ee] text-slate-900 antialiased;
+}
+
+.auth-stage {
+  position: relative;
+}
+
+.career-orbit {
+  position: absolute;
+  border-radius: 9999px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  animation: float-orbit 9s ease-in-out infinite;
+}
+
+.career-orbit-one {
+  left: -10rem;
+  top: 8rem;
+  height: 24rem;
+  width: 24rem;
+  background: rgba(45, 212, 191, 0.18);
+}
+
+.career-orbit-two {
+  bottom: -8rem;
+  right: 4rem;
+  height: 18rem;
+  width: 18rem;
+  background: rgba(251, 191, 36, 0.22);
+  animation-delay: -3s;
+}
+
+.career-ribbon {
+  position: absolute;
+  right: 42%;
+  top: -12rem;
+  height: 42rem;
+  width: 10rem;
+  rotate: 28deg;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(20, 184, 166, 0.28));
+  opacity: 0.14;
+}
+
+.career-pulse {
+  position: absolute;
+  inset: auto -8rem -16rem auto;
+  height: 32rem;
+  width: 32rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(45, 212, 191, 0.38), rgba(45, 212, 191, 0.04) 55%, transparent 70%);
+  animation: pulse-glow 5s ease-in-out infinite;
+}
+
+@keyframes float-orbit {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(18px, -16px, 0) scale(1.04);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.65;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}

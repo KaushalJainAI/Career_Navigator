@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Career Navigator</title>
+  <style>
+    body { font-family: system-ui, sans-serif; width: 320px; padding: 12px; margin: 0; }
+    h1 { font-size: 14px; margin: 0 0 8px; }
+    label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #475569; margin-top: 8px; }
+    input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; }
+    button { margin-top: 10px; width: 100%; padding: 8px; background: #0f172a; color: white; border: 0; border-radius: 10px; font-weight: 700; cursor: pointer; }
+    .status { margin-top: 8px; font-size: 12px; padding: 6px; border-radius: 8px; }
+    .ok { background: #ecfdf5; color: #065f46; }
+    .err { background: #fef2f2; color: #991b1b; }
+  </style>
+</head>
+<body>
+  <h1>Career Navigator</h1>
+  <label>Backend URL</label>
+  <input id="backend" type="url" placeholder="http://localhost:8000" />
+  <label>API token</label>
+  <input id="token" type="password" placeholder="Paste your API token" />
+  <button id="save">Save & test</button>
+  <div id="status"></div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

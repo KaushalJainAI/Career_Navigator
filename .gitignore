@@ -27,6 +27,7 @@ backend/db.sqlite3
 .env.*.local
 backend/.env
 frontend/.env
+*.pem
 
 # ──── Node / Vite / Frontend ────
 node_modules/
@@ -67,3 +68,6 @@ playwright/.cache/
 # ──── Browser extension build (Phase 2) ────
 extension/dist/
 extension/build/
+docs/artifacts/
+*.key
+*.pen

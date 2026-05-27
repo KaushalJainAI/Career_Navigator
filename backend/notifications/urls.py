@@ -1,9 +1,10 @@
 from django.urls import path
 
-from .views import AlertListView, PushRegisterView, SubscriptionListCreateView
+from .views import AlertListView, AlertMarkReadView, PushRegisterView, SubscriptionListCreateView
 
 urlpatterns = [
     path('subscriptions/', SubscriptionListCreateView.as_view(), name='subscription-list'),
     path('alerts/', AlertListView.as_view(), name='alert-list'),
+    path('alerts/<int:pk>/read/', AlertMarkReadView.as_view(), name='alert-read'),
     path('push/register/', PushRegisterView.as_view(), name='push-register'),
 ]

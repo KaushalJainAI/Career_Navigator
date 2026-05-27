@@ -9,7 +9,11 @@ from datetime import timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+load_dotenv(BASE_DIR.parent / '.env')
+load_dotenv(BASE_DIR / '.env')
 
 
 def _split_env_list(value: str) -> list[str]:
@@ -91,6 +95,7 @@ INSTALLED_APPS = [
     'matching',
     'notifications',
     'applications',
+    'networking',
     'tailoring',
     'agent',
     'interview',
@@ -163,6 +168,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'accounts.authentication.APITokenAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
@@ -201,6 +207,19 @@ NVIDIA_GUEST_MODEL = os.environ.get(
     'NVIDIA_GUEST_MODEL', 'nvidia/llama-3.3-nemotron-super-49b-v1'
 )
 GUEST_CHAT_MAX_TOKENS = int(os.environ.get('GUEST_CHAT_MAX_TOKENS', '200000'))
+
+# --- AI provider transport ---
+# `codex_cli` is intended for personal/local deployments where the machine has
+# already authenticated via `codex login` or `codex login --device-auth`.
+AI_PROVIDER = os.environ.get('AI_PROVIDER', '').strip()
+AI_FALLBACK_PROVIDER = os.environ.get('AI_FALLBACK_PROVIDER', 'nvidia').strip()
+CODEX_CLI_COMMAND = os.environ.get('CODEX_CLI_COMMAND', 'codex')
+CODEX_CLI_MODEL = os.environ.get('CODEX_CLI_MODEL', '')
+CODEX_CLI_SANDBOX = os.environ.get('CODEX_CLI_SANDBOX', 'read-only')
+CODEX_CLI_TIMEOUT_SECONDS = int(os.environ.get('CODEX_CLI_TIMEOUT_SECONDS', '120'))
+CODEX_CLI_WORKDIR = os.environ.get('CODEX_CLI_WORKDIR', '').strip() or str(BASE_DIR)
+NVIDIA_TIMEOUT_SECONDS = int(os.environ.get('NVIDIA_TIMEOUT_SECONDS', '120'))
+NVIDIA_MAX_TOKENS = int(os.environ.get('NVIDIA_MAX_TOKENS', '2048'))
 
 # --- Channels / Celery / Redis ---
 REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
@@ -279,6 +298,7 @@ ACCOUNT_EMAIL_VERIFICATION = 'none'
 
 EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'no-reply@career-navigator.local')
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
 
 LOGGING = {
     'version': 1,

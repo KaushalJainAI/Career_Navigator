@@ -11,6 +11,7 @@ api_v1 = [
     path('matching/', include('matching.urls')),
     path('notifications/', include('notifications.urls')),
     path('applications/', include('applications.urls')),
+    path('networking/', include('networking.urls')),
     path('tailoring/', include('tailoring.urls')),
     path('agent/', include('agent.urls')),
     path('interview/', include('interview.urls')),

@@ -1,0 +1,40 @@
+from django.urls import path
+
+from .views import (
+    ActionQueueListView,
+    CompanyRelationshipListCreateView,
+    ContactDetailView,
+    ContactEmploymentDetailView,
+    ContactEmploymentListCreateView,
+    ContactListCreateView,
+    ContactRelationshipDetailView,
+    ContactRelationshipListCreateView,
+    GraphNeighborhoodView,
+    JobReferralSuggestionsView,
+    OutreachApproveView,
+    OutreachMessageDetailView,
+    OutreachMessageListCreateView,
+    ReferralOpportunityListView,
+    WarmIntrosView,
+)
+
+urlpatterns = [
+    path('contacts/', ContactListCreateView.as_view(), name='contact-list'),
+    path('contacts/<int:pk>/', ContactDetailView.as_view(), name='contact-detail'),
+    path('contacts/<int:pk>/employments/', ContactEmploymentListCreateView.as_view(),
+         name='contact-employments'),
+    path('contacts/<int:pk>/relationships/', ContactRelationshipListCreateView.as_view(),
+         name='contact-relationships'),
+    path('employments/<int:pk>/', ContactEmploymentDetailView.as_view(), name='employment-detail'),
+    path('relationships/<int:pk>/', ContactRelationshipDetailView.as_view(), name='relationship-detail'),
+    path('companies/<int:pk>/relationships/', CompanyRelationshipListCreateView.as_view(),
+         name='company-relationships'),
+    path('graph/', GraphNeighborhoodView.as_view(), name='network-graph'),
+    path('warm-intros/<int:company_id>/', WarmIntrosView.as_view(), name='warm-intros'),
+    path('jobs/<int:job_id>/referrals/', JobReferralSuggestionsView.as_view(), name='job-referrals'),
+    path('referrals/', ReferralOpportunityListView.as_view(), name='referral-list'),
+    path('outreach/', OutreachMessageListCreateView.as_view(), name='outreach-list'),
+    path('outreach/<int:pk>/', OutreachMessageDetailView.as_view(), name='outreach-detail'),
+    path('outreach/<int:pk>/approve/', OutreachApproveView.as_view(), name='outreach-approve'),
+    path('queue/', ActionQueueListView.as_view(), name='action-queue'),
+]

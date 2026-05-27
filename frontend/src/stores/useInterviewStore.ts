@@ -34,14 +34,18 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   loading: false,
   start: async (payload) => {
     set({ loading: true });
-    const session = await Interview.start(payload);
-    set({
-      sessionId: session.id,
-      questions: session.questions ?? [],
-      turns: [],
-      currentIndex: 0,
-      loading: false,
-    });
+    try {
+      const session = await Interview.start(payload);
+      set({
+        sessionId: session.id,
+        questions: session.questions ?? [],
+        turns: [],
+        currentIndex: 0,
+        loading: false,
+      });
+    } catch {
+      set({ loading: false });
+    }
   },
   answer: async (text) => {
     const id = get().sessionId;

@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from ai.providers import get_configured_llm
 from .grilling import (
     evaluate_answer,
     generate_question_bank,
@@ -33,11 +34,13 @@ class SessionListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         session = serializer.save(user=self.request.user)
         company_name = session.company.name if session.company else session.research.get('company', '')
+        llm = get_configured_llm()
         session.research = research(company_name or session.research.get('company', ''),
-                                    session.role, session.stage)
+                                    session.role, session.stage, llm=llm)
         bank = generate_question_bank(session.role, session.stage,
                                       difficulty=session.difficulty,
-                                      research_notes=session.research)
+                                      research_notes=session.research,
+                                      llm=llm)
         for idx, q in enumerate(bank):
             InterviewQuestion.objects.create(session=session, order=idx, **q)
         session.status = 'ready'
@@ -70,7 +73,9 @@ class AnswerView(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
         answer = request.data.get('answer', '')
         evaluation = evaluate_answer(
-            {'prompt': question.prompt, 'expected_signals': question.expected_signals}, answer
+            {'prompt': question.prompt, 'expected_signals': question.expected_signals},
+            answer,
+            llm=get_configured_llm(),
         )
         turn = InterviewTurn.objects.create(
             question=question, user_answer=answer, evaluation=evaluation,

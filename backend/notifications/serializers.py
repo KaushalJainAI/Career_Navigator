@@ -11,6 +11,9 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 
 
 class AlertSerializer(serializers.ModelSerializer):
+    job_title = serializers.CharField(source='job.title', read_only=True)
+    company_name = serializers.CharField(source='job.company.name', read_only=True)
+
     class Meta:
         model = Alert
         fields = '__all__'

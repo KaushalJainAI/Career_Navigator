@@ -9,6 +9,10 @@ export const Auth = {
   guestKey: () => api.post('/auth/guest-key/').then((r) => r.data),
   google: (code: string, redirect_uri?: string) =>
     api.post('/auth/google/', { code, redirect_uri }).then((r) => r.data),
+  passwordReset: (email: string) =>
+    api.post('/auth/password-reset/', { email }).then((r) => r.data),
+  passwordResetConfirm: (uid: string, token: string, password: string) =>
+    api.post('/auth/password-reset/confirm/', { uid, token, password }).then((r) => r.data),
 };
 
 /** Builds the front-channel Google OAuth URL. Google redirects back to
@@ -86,9 +90,57 @@ export const Agent = {
     api.post(`/agent/sessions/${sessionId}/chat/`, { message, phase_cap }).then((r) => r.data),
 };
 
+export const ApiTokens = {
+  list: () => api.get('/auth/api-tokens/').then((r) => r.data),
+  create: (name: string) =>
+    api.post('/auth/api-tokens/', { name }).then((r) => r.data as {
+      id: number; name: string; token: string; created_at: string;
+    }),
+  revoke: (id: number) =>
+    api.post(`/auth/api-tokens/${id}/revoke/`).then((r) => r.data),
+};
+
+export const Network = {
+  graph: (root = 'user:self', depth = 1) =>
+    api.get('/networking/graph/', { params: { root, depth } }).then((r) => r.data as {
+      nodes: { id: string; type: string; data: Record<string, unknown> }[];
+      edges: { id: string; source: string; target: string; label: string }[];
+    }),
+  warmIntros: (companyId: number, maxHops = 2) =>
+    api.get(`/networking/warm-intros/${companyId}/`, { params: { max_hops: maxHops } })
+       .then((r) => r.data),
+  contacts: {
+    list: (params: Record<string, string | number> = {}) =>
+      api.get('/networking/contacts/', { params }).then((r) => r.data),
+    create: (payload: Record<string, unknown>) =>
+      api.post('/networking/contacts/', payload).then((r) => r.data),
+    patch: (id: number, payload: Record<string, unknown>) =>
+      api.patch(`/networking/contacts/${id}/`, payload).then((r) => r.data),
+    remove: (id: number) =>
+      api.delete(`/networking/contacts/${id}/`).then((r) => r.data),
+  },
+  employments: {
+    list: (contactId: number) =>
+      api.get(`/networking/contacts/${contactId}/employments/`).then((r) => r.data),
+    create: (contactId: number, payload: Record<string, unknown>) =>
+      api.post(`/networking/contacts/${contactId}/employments/`, payload).then((r) => r.data),
+    remove: (id: number) =>
+      api.delete(`/networking/employments/${id}/`).then((r) => r.data),
+  },
+  relationships: {
+    list: (contactId: number) =>
+      api.get(`/networking/contacts/${contactId}/relationships/`).then((r) => r.data),
+    create: (contactId: number, payload: Record<string, unknown>) =>
+      api.post(`/networking/contacts/${contactId}/relationships/`, payload).then((r) => r.data),
+    remove: (id: number) =>
+      api.delete(`/networking/relationships/${id}/`).then((r) => r.data),
+  },
+};
+
 export const Notifications = {
   subscriptions: () => api.get('/notifications/subscriptions/').then((r) => r.data),
   createSubscription: (payload: Record<string, unknown>) =>
     api.post('/notifications/subscriptions/', payload).then((r) => r.data),
   alerts: () => api.get('/notifications/alerts/').then((r) => r.data),
+  markRead: (id: number) => api.post(`/notifications/alerts/${id}/read/`).then((r) => r.data),
 };
