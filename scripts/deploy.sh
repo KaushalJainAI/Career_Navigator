@@ -24,7 +24,7 @@ python manage.py collectstatic --noinput
 echo "==> Frontend: build"
 cd "$ROOT/frontend"
 npm ci
-VITE_API_BASE="${VITE_API_BASE:-http://ec2-13-207-61-191.ap-south-1.compute.amazonaws.com/api/v1}" \
+VITE_API_BASE="${VITE_API_BASE:-https://career.kaushaljain.com/api/v1}" \
   npm run build
 
 echo "==> Restarting services"
@@ -35,7 +35,9 @@ echo "==> Health check"
 sleep 2
 curl -sf -o /dev/null -w "backend status: %{http_code}\n" http://127.0.0.1:8000/api/v1/auth/me/ \
     || echo "WARN: backend health check failed — check 'journalctl -u cn-backend -n 50'"
-curl -sf -o /dev/null -w "nginx status:   %{http_code}\n" http://127.0.0.1/ \
-    || echo "WARN: nginx health check failed"
+curl -sf -o /dev/null -w "nginx local:    %{http_code}\n" -k https://127.0.0.1/ \
+    || echo "WARN: local HTTPS health check failed"
+curl -sf -o /dev/null -w "edge HTTPS:     %{http_code}\n" https://career.kaushaljain.com/ \
+    || echo "WARN: edge HTTPS health check failed (Cloudflare path)"
 
 echo "==> Done. db.sqlite3 size: $(du -h "$ROOT/backend/db.sqlite3" 2>/dev/null | cut -f1 || echo '<missing>')"
