@@ -100,9 +100,17 @@ Every app ships unit tests in `<app>/tests/test_*.py`. Full policy: [docs/testin
 
 ## Phases
 
-- **Phase 1 (MVP) — scaffolded.** Discovery via Adzuna + Greenhouse, profile chat onboarding, resume parse + match, tailoring, email + push notifications, Google OAuth + NVIDIA guest pool.
-- **Phase 2 — pending.** Jooble/JSearch/Lever adapters, Playwright scraper, email-forward parser, browser extension (autofill tier), cover letters, JD red-flag detector, Interview Grill (text mode), application analytics.
-- **Phase 3 — pending.** Autonomous-apply behind HITL gates, Workday/Greenhouse/Lever AuthFlows, LinkedIn integration, salary intelligence, voice mode for Interview Grill.
+- **Phase 1 (MVP) - implemented beyond scaffold.** Auth, Google OAuth, API tokens, profile onboarding updates, profile readiness, resume upload/parse, deterministic skill extraction, Adzuna + Greenhouse ingestion, match scoring, real dashboard stats, applications Kanban with job details, tailoring, cover letters, notification subscriptions, credits ledger, and Interview Grill text mode are wired.
+- **Phase 2 - partially implemented.** Apply workflow now supports distinct `assist`, `autofill`, and `autonomous` preparation paths with application events and HITL approval-token issuance. Job detail can generate and display tailored resume + cover letter materials. Network graph supports manual contact seeding. Browser extension APIs and parsers exist, but the full install/autofill/submit workflow still needs end-to-end validation.
+- **Phase 3 - pending.** Server-side Playwright autonomous submit, portal AuthFlows, LinkedIn integration, salary intelligence, voice interview mode, Stripe checkout/webhooks, and advanced analytics are not complete.
+
+Latest verification after the staged functionality pass:
+
+```bash
+cd backend && pytest -q              # 131 passed
+cd frontend && npm run test -- --run # 5 tests passed
+cd frontend && npm run build         # passed
+```
 
 Detailed vision and prioritisation: [docs/vision.md](docs/vision.md).
 
