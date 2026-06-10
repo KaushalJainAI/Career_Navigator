@@ -30,6 +30,17 @@ export interface ParsedPosting {
   raw?: Record<string, unknown>;
 }
 
+export interface AutofillPayload {
+  application_id: number | null;
+  fields: Record<string, string>;
+  field_confidence: Record<string, number>;
+}
+
+export interface AutofillResult {
+  filled: Record<string, string>;
+  skipped: Record<string, string>;
+}
+
 export interface ParsedExperience {
   company_name: string;
   company_domain?: string;

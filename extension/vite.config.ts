@@ -1,4 +1,19 @@
+import { copyFileSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
+
+function copyExtensionAssets() {
+  return {
+    name: 'copy-extension-assets',
+    closeBundle() {
+      const root = process.cwd();
+      const outDir = resolve(root, 'dist');
+      mkdirSync(outDir, { recursive: true });
+      copyFileSync(resolve(root, 'manifest.json'), resolve(outDir, 'manifest.json'));
+      copyFileSync(resolve(root, 'popup.html'), resolve(outDir, 'popup.html'));
+    },
+  };
+}
 
 /**
  * Plain Vite build for the MV3 extension. Each content script is an entry
@@ -6,6 +21,7 @@ import { defineConfig } from 'vite';
  * `matches` patterns in manifest.json.
  */
 export default defineConfig({
+  plugins: [copyExtensionAssets()],
   build: {
     outDir: 'dist',
     emptyOutDir: true,

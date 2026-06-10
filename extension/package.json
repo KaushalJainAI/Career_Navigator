@@ -6,6 +6,7 @@
   "description": "User-driven MV3 extension: parses job and profile pages the user is viewing, posts to the Career Navigator backend.",
   "scripts": {
     "build": "vite build",
+    "package": "npm run build && node scripts/validate-build.mjs",
     "dev": "vite",
     "test": "vitest run",
     "test:watch": "vitest"
