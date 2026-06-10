@@ -71,3 +71,6 @@ extension/build/
 docs/artifacts/
 *.key
 *.pen
+
+# Local one-off seed with personal data — never commit
+backend/scripts/seed_kaushal.py
