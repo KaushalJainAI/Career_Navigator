@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from jobs.serializers import JobPostingSerializer
+
 from .models import Application, ApplicationEvent, AutoApplySession
 
 
@@ -19,6 +21,7 @@ class AutoApplySessionSerializer(serializers.ModelSerializer):
 class ApplicationSerializer(serializers.ModelSerializer):
     events = ApplicationEventSerializer(many=True, read_only=True)
     auto_apply_session = AutoApplySessionSerializer(read_only=True)
+    job_detail = JobPostingSerializer(source='job', read_only=True)
 
     class Meta:
         model = Application

@@ -34,13 +34,64 @@ class PreferenceSerializer(serializers.ModelSerializer):
 
 
 class StructuredProfileSerializer(serializers.ModelSerializer):
-    experiences = ExperienceSerializer(many=True, read_only=True)
-    educations = EducationSerializer(many=True, read_only=True)
-    skills = SkillSerializer(many=True, read_only=True)
-    projects = ProjectSerializer(many=True, read_only=True)
-    preference = PreferenceSerializer(read_only=True)
+    experiences = ExperienceSerializer(many=True, required=False)
+    educations = EducationSerializer(many=True, required=False)
+    skills = SkillSerializer(many=True, required=False)
+    projects = ProjectSerializer(many=True, required=False)
+    preference = PreferenceSerializer(required=False)
+    readiness = serializers.SerializerMethodField()
 
     class Meta:
         model = StructuredProfile
         fields = '__all__'
         read_only_fields = ['user', 'created_at', 'updated_at']
+
+    def get_readiness(self, instance):
+        checks = {
+            'name': bool(instance.full_name),
+            'headline': bool(instance.headline),
+            'location': bool(instance.location),
+            'skills': instance.skills.exists(),
+            'experience': instance.experiences.exists(),
+            'preferences': hasattr(instance, 'preference'),
+        }
+        complete_count = sum(1 for ok in checks.values() if ok)
+        return {
+            'checks': checks,
+            'score': round(complete_count / len(checks), 4),
+            'missing': [name for name, ok in checks.items() if not ok],
+            'ready': complete_count >= 4,
+        }
+
+    # Each related list is a *full replacement* of the existing rows: omit a key
+    # to leave it untouched, send a list (possibly empty) to overwrite it. This
+    # keeps the profile form a single PATCH instead of N sub-resource endpoints.
+    _RELATED = {
+        'experiences': Experience,
+        'educations': Education,
+        'skills': Skill,
+        'projects': Project,
+    }
+
+    def update(self, instance, validated_data):
+        related = {
+            name: validated_data.pop(name, None) for name in self._RELATED
+        }
+        preference_data = validated_data.pop('preference', None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        for name, items in related.items():
+            if items is None:
+                continue
+            getattr(instance, name).all().delete()
+            model = self._RELATED[name]
+            model.objects.bulk_create([model(profile=instance, **item) for item in items])
+
+        if preference_data is not None:
+            Preference.objects.update_or_create(profile=instance, defaults=preference_data)
+
+        instance.refresh_from_db()
+        return instance

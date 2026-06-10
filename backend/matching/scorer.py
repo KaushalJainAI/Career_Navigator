@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Iterable
 
 from .embeddings import cosine, embed
+from resumes.parsing import extract_skill_names
 
 
 def _resume_text(parsed: dict) -> str:
@@ -42,7 +43,7 @@ def score_resume_against_job(parsed_resume: dict, job_title: str, job_descriptio
 
     resume_skill_set = _normalise_skills(
         resume_skills if resume_skills is not None else parsed_resume.get('skills', []))
-    jd_skill_set = _normalise_skills(jd_skills or [])
+    jd_skill_set = _normalise_skills(jd_skills if jd_skills is not None else extract_skill_names(jd_text))
     if jd_skill_set:
         overlap = len(resume_skill_set & jd_skill_set) / len(jd_skill_set)
     else:

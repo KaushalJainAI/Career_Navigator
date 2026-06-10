@@ -18,6 +18,14 @@ class SubscriptionListCreateView(generics.ListCreateAPIView):
         serializer.save(user=self.request.user)
 
 
+class SubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = SubscriptionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Subscription.objects.filter(user=self.request.user)
+
+
 class AlertListView(generics.ListAPIView):
     serializer_class = AlertSerializer
     permission_classes = [IsAuthenticated]

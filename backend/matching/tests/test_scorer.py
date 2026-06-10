@@ -30,3 +30,18 @@ def test_score_returns_breakdown_and_gaps():
     assert 'score' in out
     assert out['breakdown']['skill_overlap'] > 0
     assert 'kafka' in out['gaps']
+
+
+def test_score_infers_jd_skills_when_not_provided():
+    parsed = {
+        'summary': 'Backend engineer',
+        'skills': [{'name': 'Python'}, {'name': 'Django'}],
+    }
+    out = score_resume_against_job(
+        parsed,
+        job_title='Backend Engineer',
+        job_description='We use Python, Django, Docker, and Kafka.',
+    )
+
+    assert out['breakdown']['skill_overlap'] == 0.5
+    assert out['gaps'] == ['docker', 'kafka']

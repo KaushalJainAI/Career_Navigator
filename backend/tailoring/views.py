@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ai.providers import configured_model_label, get_configured_llm
-from applications.models import Application
+from applications.models import Application, ApplicationEvent, ApplicationStatus
 from resumes.models import Resume
 
 from .generators import draft_cover_letter, tailor_resume
@@ -34,6 +34,10 @@ class TailorResumeView(APIView):
                 'model_used': configured_model_label() if llm else '',
             },
         )
+        if app.status == ApplicationStatus.SAVED:
+            app.status = ApplicationStatus.TAILORED
+            app.save(update_fields=['status', 'updated_at'])
+        ApplicationEvent.objects.create(application=app, type='tailored_resume_generated', payload={'tailored_resume_id': tr.id})
         return Response({'id': tr.id, 'content': tr.content})
 
 
@@ -56,4 +60,5 @@ class DraftCoverLetterView(APIView):
             application=app,
             defaults={'content': text, 'model_used': configured_model_label() if llm else ''},
         )
+        ApplicationEvent.objects.create(application=app, type='cover_letter_generated', payload={'cover_letter_id': cl.id})
         return Response({'id': cl.id, 'content': cl.content})
