@@ -17,6 +17,9 @@ export function NetworkGraphPage() {
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [selected, setSelected] = useState<GraphNode | null>(null);
   const [loading, setLoading] = useState(false);
+  const [name, setName] = useState('');
+  const [title, setTitle] = useState('');
+  const [company, setCompany] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -49,6 +52,27 @@ export function NetworkGraphPage() {
     }
   }
 
+  async function refreshGraph() {
+    if (!user) return;
+    const data = await Network.graph(`user:${(user as { id: number }).id}`, 1);
+    setNodes(data.nodes);
+    setEdges(data.edges);
+  }
+
+  async function addContact() {
+    if (!name.trim()) return;
+    await Network.contacts.create({
+      name,
+      title,
+      notes: company ? `Company: ${company}` : '',
+      tags: company ? [company] : [],
+    });
+    setName('');
+    setTitle('');
+    setCompany('');
+    await refreshGraph();
+  }
+
   return (
     <div className="space-y-4">
       <header>
@@ -67,6 +91,15 @@ export function NetworkGraphPage() {
           )}
         </div>
         <aside className="rounded-3xl bg-white p-4 shadow-sm">
+          <section className="mb-5 border-b border-slate-100 pb-4">
+            <h2 className="text-sm font-black uppercase text-slate-500">Add contact</h2>
+            <div className="mt-3 space-y-2">
+              <input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
+              <input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" />
+              <input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company hint" />
+              <button onClick={addContact} className="w-full rounded-xl bg-slate-950 px-3 py-2 text-sm font-black text-white">Add contact</button>
+            </div>
+          </section>
           <h2 className="text-sm font-black uppercase text-slate-500">Details</h2>
           {selected ? (
             <div className="mt-3 space-y-2 text-sm">

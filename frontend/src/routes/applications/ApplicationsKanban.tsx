@@ -24,8 +24,11 @@ export function ApplicationsKanban() {
               <ul className="space-y-2">
                 {items.map((a) => (
                   <li key={a.id} className="rounded-xl bg-white p-3 shadow-sm">
-                    <div className="text-sm font-bold text-slate-800">Job #{a.job}</div>
-                    <div className="text-xs font-semibold text-slate-500">{a.tier_used || 'assist'}</div>
+                    <div className="text-sm font-bold text-slate-800">{a.job_detail?.title || `Job #${a.job}`}</div>
+                    <div className="mt-1 text-xs font-semibold text-slate-500">
+                      {a.job_detail?.company?.name || 'Unknown company'}{a.job_detail?.location ? ` - ${a.job_detail.location}` : ''}
+                    </div>
+                    <div className="mt-1 text-xs font-semibold text-slate-500">{a.tier_used || 'assist'}</div>
                     <select
                       className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm"
                       value={a.status}

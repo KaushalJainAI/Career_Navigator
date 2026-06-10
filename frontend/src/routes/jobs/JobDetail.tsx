@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { CheckCircle2, ExternalLink, ShieldCheck } from 'lucide-react';
 import { Jobs, Applications, Tailoring } from '../../api/endpoints';
 
 interface Job {
@@ -16,21 +17,60 @@ interface Match {
   gaps: string[];
 }
 
+type ApplyTier = 'assist' | 'autofill' | 'autonomous';
+
+interface PreparedApplication {
+  tier: ApplyTier;
+  status: string;
+  apply_url: string;
+  approval_token?: string;
+  next_actions: string[];
+  application: { id: number };
+}
+
+interface GeneratedMaterials {
+  resume?: { id: number; content: { raw_text?: string; summary?: string } };
+  coverLetter?: { id: number; content: string };
+}
+
 export function JobDetail() {
   const { id } = useParams();
   const jobId = Number(id);
   const [job, setJob] = useState<Job | null>(null);
   const [match, setMatch] = useState<Match | null>(null);
+  const [prepared, setPrepared] = useState<PreparedApplication | null>(null);
+  const [busyTier, setBusyTier] = useState<ApplyTier | null>(null);
+  const [materials, setMaterials] = useState<GeneratedMaterials>({});
+  const [materialsBusy, setMaterialsBusy] = useState(false);
 
   useEffect(() => {
     Jobs.detail(jobId).then(setJob);
     Jobs.match(jobId).then(setMatch).catch(() => undefined);
   }, [jobId]);
 
-  async function apply(tier: string) {
-    const app = await Applications.create(jobId, tier);
-    await Tailoring.resume(app.id);
-    alert('Application created and tailored resume generated.');
+  async function apply(tier: ApplyTier) {
+    setBusyTier(tier);
+    try {
+      const result = await Applications.prepare(jobId, tier);
+      setPrepared(result);
+      setMaterials({});
+    } finally {
+      setBusyTier(null);
+    }
+  }
+
+  async function generateMaterials() {
+    if (!prepared) return;
+    setMaterialsBusy(true);
+    try {
+      const [resume, coverLetter] = await Promise.all([
+        Tailoring.resume(prepared.application.id),
+        Tailoring.coverLetter(prepared.application.id),
+      ]);
+      setMaterials({ resume, coverLetter });
+    } finally {
+      setMaterialsBusy(false);
+    }
   }
 
   if (!job) return <p>Loading...</p>;
@@ -50,10 +90,78 @@ export function JobDetail() {
       )}
       <article className="prose max-w-none rounded-2xl bg-white p-4 text-sm leading-7 sm:p-5 sm:text-base" dangerouslySetInnerHTML={{ __html: job.description }} />
       <div className="grid gap-2 sm:flex sm:flex-wrap">
-        <button className="rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white" onClick={() => apply('assist')}>Assist apply</button>
-        <button className="rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white" onClick={() => apply('autofill')}>Autofill</button>
-        <button className="rounded-xl bg-red-600 px-4 py-3 font-bold text-white" onClick={() => apply('autonomous')}>Autonomous</button>
+        <button className="rounded-xl bg-slate-950 px-4 py-3 font-bold text-white disabled:opacity-60" disabled={!!busyTier} onClick={() => apply('assist')}>
+          {busyTier === 'assist' ? 'Preparing...' : 'Assist apply'}
+        </button>
+        <button className="rounded-xl bg-teal-600 px-4 py-3 font-bold text-white disabled:opacity-60" disabled={!!busyTier} onClick={() => apply('autofill')}>
+          {busyTier === 'autofill' ? 'Preparing...' : 'Autofill handoff'}
+        </button>
+        <button className="rounded-xl bg-red-600 px-4 py-3 font-bold text-white disabled:opacity-60" disabled={!!busyTier} onClick={() => apply('autonomous')}>
+          {busyTier === 'autonomous' ? 'Preparing...' : 'Autonomous review'}
+        </button>
       </div>
+      {prepared && (
+        <div className="rounded-2xl border border-teal-100 bg-white p-4 shadow-sm sm:p-5">
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-teal-600" />
+            <div>
+              <h2 className="font-black text-slate-950">
+                {prepared.tier === 'assist' && 'Application saved for assisted apply'}
+                {prepared.tier === 'autofill' && 'Autofill handoff is ready'}
+                {prepared.tier === 'autonomous' && 'Autonomous flow is paused for review'}
+              </h2>
+              <p className="mt-1 text-sm font-semibold text-slate-500">
+                Application #{prepared.application.id} is now {prepared.status}.
+              </p>
+            </div>
+          </div>
+          <ul className="mt-4 space-y-2 text-sm text-slate-700">
+            {prepared.next_actions.map((action) => (
+              <li key={action} className="flex gap-2">
+                <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-teal-500" />
+                <span>{action}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60" disabled={materialsBusy} onClick={generateMaterials}>
+              {materialsBusy ? 'Generating...' : 'Generate materials'}
+            </button>
+            {prepared.apply_url && (
+              <a className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white" href={prepared.apply_url} target="_blank" rel="noreferrer">
+                Open apply link
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            )}
+            {prepared.approval_token && (
+              <span className="inline-flex items-center gap-2 rounded-xl bg-amber-100 px-4 py-2 text-sm font-black text-amber-900">
+                <ShieldCheck className="h-4 w-4" />
+                Approval token issued
+              </span>
+            )}
+          </div>
+          {(materials.resume || materials.coverLetter) && (
+            <div className="mt-5 grid gap-3 lg:grid-cols-2">
+              {materials.resume && (
+                <section className="rounded-xl bg-slate-50 p-3">
+                  <h3 className="text-sm font-black text-slate-900">Tailored resume</h3>
+                  <p className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                    {materials.resume.content.raw_text || materials.resume.content.summary || 'Generated resume content is ready.'}
+                  </p>
+                </section>
+              )}
+              {materials.coverLetter && (
+                <section className="rounded-xl bg-slate-50 p-3">
+                  <h3 className="text-sm font-black text-slate-900">Cover letter</h3>
+                  <p className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                    {materials.coverLetter.content}
+                  </p>
+                </section>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

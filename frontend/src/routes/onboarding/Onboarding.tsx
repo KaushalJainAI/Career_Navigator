@@ -22,7 +22,10 @@ export function Onboarding() {
     setInput('');
     setMessages((m) => [...m, { role: 'user', content: text }]);
     const out = await Agent.chat(id, text, 1);
-    setMessages((m) => [...m, { role: 'assistant', content: JSON.stringify(out.observations) }]);
+    setMessages((m) => [...m, {
+      role: 'assistant',
+      content: out.reply || 'Saved what I could find. Keep going.',
+    }]);
   }
 
   return (

@@ -4,6 +4,12 @@ import { Applications } from '../api/endpoints';
 interface Application {
   id: number;
   job: number;
+  job_detail?: {
+    id: number;
+    title: string;
+    company?: { name: string };
+    location?: string;
+  };
   status: string;
   tier_used: string;
 }

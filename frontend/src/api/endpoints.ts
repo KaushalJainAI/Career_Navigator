@@ -34,6 +34,13 @@ export function buildGoogleAuthUrl(): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
+export const Account = {
+  update: (payload: { first_name?: string; last_name?: string; stealth_domains?: string[] }) =>
+    api.patch('/auth/me/', payload).then((r) => r.data),
+  changePassword: (current_password: string, new_password: string) =>
+    api.post('/auth/change-password/', { current_password, new_password }).then((r) => r.data),
+};
+
 export const Profile = {
   get: () => api.get('/profile/').then((r) => r.data),
   patch: (payload: Record<string, unknown>) => api.patch('/profile/', payload).then((r) => r.data),
@@ -59,6 +66,9 @@ export const Jobs = {
 
 export const Applications = {
   list: () => api.get('/applications/').then((r) => r.data),
+  stats: () => api.get('/applications/stats/').then((r) => r.data),
+  prepare: (jobId: number, tier: 'assist' | 'autofill' | 'autonomous') =>
+    api.post('/applications/prepare/', { job_id: jobId, tier }).then((r) => r.data),
   create: (jobId: number, tier?: string) =>
     api.post('/applications/', { job: jobId, tier_used: tier }).then((r) => r.data),
   patch: (id: number, payload: Record<string, unknown>) =>
@@ -141,6 +151,16 @@ export const Notifications = {
   subscriptions: () => api.get('/notifications/subscriptions/').then((r) => r.data),
   createSubscription: (payload: Record<string, unknown>) =>
     api.post('/notifications/subscriptions/', payload).then((r) => r.data),
+  patchSubscription: (id: number, payload: Record<string, unknown>) =>
+    api.patch(`/notifications/subscriptions/${id}/`, payload).then((r) => r.data),
+  deleteSubscription: (id: number) =>
+    api.delete(`/notifications/subscriptions/${id}/`).then((r) => r.data),
   alerts: () => api.get('/notifications/alerts/').then((r) => r.data),
   markRead: (id: number) => api.post(`/notifications/alerts/${id}/read/`).then((r) => r.data),
+};
+
+export const Billing = {
+  summary: () => api.get('/billing/summary/').then((r) => r.data),
+  ledger: () => api.get('/billing/ledger/').then((r) => r.data),
+  topUp: (amount: number) => api.post('/billing/top-up/', { amount }).then((r) => r.data),
 };

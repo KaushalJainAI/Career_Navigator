@@ -1,17 +1,29 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, ArrowUpRight, Briefcase, CheckCircle, Clock, Flame, Radar, Sparkles } from 'lucide-react';
 import { useJobsStore } from '../../stores/useJobsStore';
+import { Applications } from '../../api/endpoints';
+
+interface DashboardStats {
+  active_applications: number;
+  new_matches: number;
+  interviews_ready: number;
+  offers_received: number;
+}
 
 export function Dashboard() {
   const { jobs, fetch, loading } = useJobsStore();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   useEffect(() => { fetch({ remote: true }); }, [fetch]);
+  useEffect(() => {
+    Applications.stats().then(setStats).catch(() => undefined);
+  }, []);
 
   const kpis = [
-    { label: 'Active Applications', value: '12', icon: Activity, tone: 'bg-sky-100 text-sky-700' },
-    { label: 'New Matches', value: '8', icon: Briefcase, tone: 'bg-teal-100 text-teal-700' },
-    { label: 'Interviews Ready', value: '2', icon: Clock, tone: 'bg-amber-100 text-amber-700' },
-    { label: 'Offers Received', value: '0', icon: CheckCircle, tone: 'bg-emerald-100 text-emerald-700' },
+    { label: 'Active Applications', value: stats?.active_applications ?? 0, icon: Activity, tone: 'bg-sky-100 text-sky-700' },
+    { label: 'New Matches', value: stats?.new_matches ?? 0, icon: Briefcase, tone: 'bg-teal-100 text-teal-700' },
+    { label: 'Interviews Ready', value: stats?.interviews_ready ?? 0, icon: Clock, tone: 'bg-amber-100 text-amber-700' },
+    { label: 'Offers Received', value: stats?.offers_received ?? 0, icon: CheckCircle, tone: 'bg-emerald-100 text-emerald-700' },
   ];
 
   return (
@@ -62,7 +74,7 @@ export function Dashboard() {
               <div className={`mb-4 grid h-11 w-11 place-items-center rounded-2xl sm:mb-5 sm:h-12 sm:w-12 ${kpi.tone}`}>
                 <Icon className="h-6 w-6" />
               </div>
-              <div className="text-3xl font-black tracking-tight text-slate-950">{kpi.value}</div>
+              <div className="text-3xl font-black tracking-tight text-slate-950">{stats ? kpi.value : '-'}</div>
               <div className="mt-1 text-sm font-bold text-slate-500">{kpi.label}</div>
             </div>
           );
@@ -93,7 +105,7 @@ export function Dashboard() {
                   {j.company?.name?.[0] || '?'}
                 </div>
                 <h3 className="mt-5 pr-14 text-base font-black text-slate-950 group-hover:text-teal-700 sm:pr-16 sm:text-lg">{j.title}</h3>
-                <div className="mt-2 text-sm font-semibold text-slate-500">{j.company?.name} · {j.location}</div>
+                <div className="mt-2 text-sm font-semibold text-slate-500">{j.company?.name} - {j.location}</div>
                 <div className="mt-5 flex items-center justify-between gap-3">
                   <span className="inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-black text-teal-700">
                     <Sparkles className="h-3.5 w-3.5" />

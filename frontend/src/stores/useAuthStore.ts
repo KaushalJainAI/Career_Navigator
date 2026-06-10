@@ -5,7 +5,9 @@ import { Auth } from '../api/endpoints';
 interface User {
   id: number;
   email: string;
-  cn_profile?: { tier: string; credits_remaining: number };
+  first_name?: string;
+  last_name?: string;
+  cn_profile?: { tier: string; credits_remaining: number; stealth_domains?: string[] };
 }
 
 interface AuthState {
@@ -20,6 +22,7 @@ interface AuthState {
   confirmPasswordReset: (uid: string, token: string, password: string) => Promise<string>;
   logout: () => void;
   refresh: () => Promise<void>;
+  setUser: (user: User) => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -94,6 +97,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem('cn_refresh');
     set({ user: null });
   },
+  setUser: (user) => set({ user }),
   refresh: async () => {
     const token = localStorage.getItem('cn_access');
     if (!token) {
