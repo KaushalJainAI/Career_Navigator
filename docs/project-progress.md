@@ -148,9 +148,9 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 
 ### Phase 2 Discovery Sources
 
-- Adzuna and Greenhouse are implemented.
-- Lever parser/extension support exists, but full backend ingestion coverage is not complete.
-- Jooble, JSearch, Playwright scraper framework, email-forward parsing, and web-search/CLI-delegate fallback are planned but not fully implemented.
+- Adzuna, Greenhouse, Jooble, JSearch, and Lever backend adapters are implemented (2026-06-10) and registered in `ingestion/tasks.py::ADAPTER_REGISTRY`, with `httpx.MockTransport` test coverage (138 backend tests passing).
+- Jooble/JSearch/Lever need API keys (`JOOBLE_API_KEY`, `JSEARCH_RAPIDAPI_KEY`) or company tokens (`LEVER_TOKENS`) configured before they ingest live data — a real-key smoke run is still pending.
+- Playwright scraper framework, email-forward parsing, and web-search/CLI-delegate fallback are planned but not implemented.
 
 ### Autofill and Extension Workflow
 
@@ -202,9 +202,7 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 
 ### Data and Integrations
 
-- Jooble integration.
-- JSearch/RapidAPI integration.
-- Full Lever backend adapter.
+- Live-key smoke runs for the Jooble/JSearch/Lever adapters (code + tests landed 2026-06-10).
 - Email-forward job alert parser.
 - Production web-push setup with VAPID validation.
 - Resend email notification integration.
@@ -231,12 +229,13 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 
 ### Immediate Next Steps
 
-1. **Commit the working tree in logical groups and push to GitHub** — all recent work is uncommitted and `origin/main` is stale at `184274a`; nothing else is safe until the work is committed and CI has run. (Reordered to #1 on 2026-06-10.)
-2. Confirm GitHub Actions CI passes on the pushed commit; fix any environment drift between local and CI.
-3. Load `extension/dist` in Chrome and validate install-to-autofill-to-submit end to end on supported job pages.
-4. Expand Playwright E2E coverage for onboarding, job detail tailoring, applications Kanban status changes, and Interview Grill.
-5. Implement or explicitly postpone the remaining Phase 2 job sources (Jooble, JSearch, full Lever backend adapter) with clear priority.
-6. Add browser-extension E2E coverage once the real Chrome install flow is validated.
+1. ~~Commit the working tree in logical groups and push to GitHub~~ — done 2026-06-10 (7 grouped commits pushed, CI triggered). The local `backend/scripts/seed_kaushal.py` is gitignored because it carries a personal password and the repo is public.
+2. ~~Implement the remaining Phase 2 job sources~~ — done 2026-06-10 (Jooble, JSearch, Lever adapters + tests).
+3. Confirm GitHub Actions CI passes on the pushed commits; fix any environment drift between local and CI.
+4. Configure real API keys (`JOOBLE_API_KEY`, `JSEARCH_RAPIDAPI_KEY`, `LEVER_TOKENS`) and smoke-run each new adapter against live endpoints.
+5. Load `extension/dist` in Chrome and validate install-to-autofill-to-submit end to end on supported job pages.
+6. Expand Playwright E2E coverage for onboarding, job detail tailoring, applications Kanban status changes, and Interview Grill.
+7. Add browser-extension E2E coverage once the real Chrome install flow is validated.
 
 ### Next Product Milestone
 

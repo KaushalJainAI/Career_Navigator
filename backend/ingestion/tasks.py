@@ -5,12 +5,18 @@ from jobs.models import Source
 from .adapters.adzuna import AdzunaAdapter
 from .adapters.base import AdapterContext
 from .adapters.greenhouse import GreenhouseAdapter
+from .adapters.jooble import JoobleAdapter
+from .adapters.jsearch import JSearchAdapter
+from .adapters.lever import LeverAdapter
 from .services import run_adapter
 
 
 ADAPTER_REGISTRY = {
     'adzuna': AdzunaAdapter,
     'greenhouse': GreenhouseAdapter,
+    'jooble': JoobleAdapter,
+    'jsearch': JSearchAdapter,
+    'lever': LeverAdapter,
 }
 
 
