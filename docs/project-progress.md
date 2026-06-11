@@ -13,6 +13,9 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 ## Recently Completed
 
 - Created this project progress tracker.
+- Playwright E2E expansion (2026-06-11):
+  - Grew the suite from 2 smoke tests to 7 by adding flow coverage for the core Phase 2 surfaces: onboarding chat (user message → assistant reply), job-detail tailoring (match score → assist-apply prepare → generate resume + cover letter, plus the autonomous approval-token paused state), applications Kanban status change (asserts the `PATCH /applications/:id/` body and the optimistic board update), and the full Interview Grill loop (start → answer each question with feedback → report).
+  - Reworked `frontend/e2e/api-mocks.ts` into a method-aware router (GET/POST/PATCH) covering job detail, matching, prepare, tailoring, interview sessions/answer/report, and agent onboarding endpoints. All 7 tests pass; no real network.
 - Adapter quality + verification pass (2026-06-11):
   - Refactored the ingestion adapter layer: `make_posting()` factory enforces the posting contract, shared `get_json`/`post_json` helpers contain per-page/board failures (logged without URLs so the Jooble key can't leak), `http_client()` gives uniform timeout + connect retries, and all five adapters accept an injectable `transport` for `httpx.MockTransport` tests.
   - Added an integration test covering the full fetch → normalise → upsert → `IngestionRun`/`JobPosting` chain, including idempotent reruns and invalid-row skipping.
@@ -223,7 +226,7 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 
 ### Testing and QA
 
-- Broader frontend end-to-end tests with Playwright beyond the current smoke coverage.
+- Further Playwright E2E coverage (resumes upload, networking graph, billing top-up) beyond the 7 flows now covered (auth nav, redirect, onboarding, job-detail tailoring, Kanban status, Interview Grill).
 - Browser extension E2E tests.
 - Channels WebSocket integration tests.
 - Production-like Docker smoke test.
@@ -246,7 +249,7 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 3. Confirm GitHub Actions CI passes on the pushed commits; fix any environment drift between local and CI.
 4. Configure real API keys (`JOOBLE_API_KEY`, `JSEARCH_RAPIDAPI_KEY`, `LEVER_TOKENS`) and smoke-run each new adapter against live endpoints.
 5. Load `extension/dist` in Chrome and validate install-to-autofill-to-submit end to end on supported job pages.
-6. Expand Playwright E2E coverage for onboarding, job detail tailoring, applications Kanban status changes, and Interview Grill.
+6. ~~Expand Playwright E2E coverage for onboarding, job detail tailoring, applications Kanban status changes, and Interview Grill~~ — done 2026-06-11 (suite now 7 tests).
 7. Add browser-extension E2E coverage once the real Chrome install flow is validated.
 
 ### Next Product Milestone
