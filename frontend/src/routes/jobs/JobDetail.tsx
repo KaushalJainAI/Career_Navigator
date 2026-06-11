@@ -15,10 +15,18 @@ interface Job {
   ghost_reasons?: string[];
 }
 
+interface MatchReason {
+  kind: 'positive' | 'negative' | 'neutral';
+  title: string;
+  detail: string;
+}
+
 interface Match {
   score: number;
   breakdown: Record<string, number>;
   gaps: string[];
+  matched_skills?: string[];
+  explanation?: MatchReason[];
 }
 
 type ApplyTier = 'assist' | 'autofill' | 'autonomous';
@@ -98,10 +106,27 @@ export function JobDetail() {
         </div>
       ) : null}
       {match && (
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
+        <div className="rounded-2xl bg-white p-4 shadow-sm" data-testid="match-card">
           <div className="font-medium">Match score: {(match.score * 100).toFixed(0)}%</div>
-          {match.gaps?.length > 0 && (
-            <div className="text-sm text-amber-700">Gaps: {match.gaps.join(', ')}</div>
+          {match.explanation && match.explanation.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {match.explanation.map((reason) => (
+                <li key={reason.title} className="flex items-start gap-2 text-sm" data-kind={reason.kind}>
+                  <span className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${
+                    reason.kind === 'positive' ? 'bg-emerald-500'
+                      : reason.kind === 'negative' ? 'bg-red-500' : 'bg-slate-400'
+                  }`} />
+                  <span>
+                    <span className="font-bold text-slate-800">{reason.title}</span>
+                    <span className="text-slate-600"> — {reason.detail}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            match.gaps?.length > 0 && (
+              <div className="text-sm text-amber-700">Gaps: {match.gaps.join(', ')}</div>
+            )
           )}
         </div>
       )}

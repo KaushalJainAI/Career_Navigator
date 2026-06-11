@@ -8,11 +8,12 @@ test.beforeEach(async ({ page }) => {
 test('job detail shows match score, prepares an assist apply, and generates materials', async ({ page }) => {
   await page.goto('/jobs/101');
 
-  // job + match are loaded
+  // job + match are loaded, with an explainable breakdown
   await expect(page.getByRole('heading', { name: 'Backend Engineer' })).toBeVisible();
   await expect(page.getByText('Acme Labs')).toBeVisible();
   await expect(page.getByText('Match score: 82%')).toBeVisible();
-  await expect(page.getByText(/Gaps: Kubernetes, gRPC/)).toBeVisible();
+  await expect(page.getByText('Skill coverage 66%')).toBeVisible();
+  await expect(page.getByText(/Not found in your resume: Kubernetes, gRPC/)).toBeVisible();
 
   // prepare an assisted application
   await page.getByRole('button', { name: 'Assist apply' }).click();

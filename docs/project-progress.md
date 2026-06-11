@@ -13,6 +13,11 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 ## Recently Completed
 
 - Created this project progress tracker.
+- Match explainability shipped (2026-06-12):
+  - `matching/scorer.py` now returns `matched_skills` and a structured `explanation` (colour-coded positive/negative/neutral reasons: skill coverage %, named skill gaps, text-similarity %) alongside the existing score/breakdown/gaps.
+  - `MatchScore` gains `matched_skills` + `explanation` JSON fields (migration `matching/0002`); the match endpoint persists and returns them.
+  - Job detail renders the reasons as a colour-coded list so a candidate sees *why* a job scored as it did, not just a number.
+  - Tests: scorer unit tests for matched/gap/no-skill cases, a matching API test asserting the explanation is returned and cached, and a Playwright `match-explainability.spec.ts`.
 - Ghost-Job Shield — flagship Phase 2 feature shipped (2026-06-11):
   - New `backend/jobs/ghost.py`: deterministic, network-free ghost-risk scorer (0–100 + low/medium/high band + human-readable reasons) over content fingerprinting, copy-staleness, repost cycles, missing salary, and evergreen/red-flag JD language. Subsumes the previously-separate JD red-flag detector.
   - `JobPosting` gains liveness fields (`first_seen_at`, `last_seen_at`, `content_fingerprint`, `repost_count`, `ghost_risk`, `ghost_reasons`) + migration `jobs/0002`. `first_seen_at` resets only when the JD copy/salary changes, so staleness measures the age of *this* copy.
@@ -169,7 +174,7 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 
 ### Phase 2 Discovery Sources
 
-- Adzuna, Greenhouse, Jooble, JSearch, and Lever backend adapters are implemented and registered in `ingestion/tasks.py::ADAPTER_REGISTRY`, with `httpx.MockTransport` unit tests (normalise + fetch paging, no-key skip, and failure branches), a fetch→DB integration test, and a shared resilient base layer (163 backend tests passing as of 2026-06-11, including the Ghost-Job Shield suite).
+- Adzuna, Greenhouse, Jooble, JSearch, and Lever backend adapters are implemented and registered in `ingestion/tasks.py::ADAPTER_REGISTRY`, with `httpx.MockTransport` unit tests (normalise + fetch paging, no-key skip, and failure branches), a fetch→DB integration test, and a shared resilient base layer (167 backend tests passing as of 2026-06-12, including the Ghost-Job Shield + match-explainability suites).
 - Greenhouse and Lever were smoke-tested live against real public boards on 2026-06-11 (stripe: 496 postings, mistral: 173, all contract-valid) via `backend/scripts/smoke_adapters.py`.
 - Jooble/JSearch need API keys (`JOOBLE_API_KEY`, `JSEARCH_RAPIDAPI_KEY`) before a live smoke run; production ingestion also needs `LEVER_TOKENS`/`GREENHOUSE_TOKENS` set to the boards we want to track.
 - Playwright scraper framework, email-forward parsing, and web-search/CLI-delegate fallback are planned but not implemented.

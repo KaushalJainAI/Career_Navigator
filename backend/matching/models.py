@@ -12,6 +12,8 @@ class MatchScore(models.Model):
     score = models.FloatField()
     breakdown = models.JSONField(default=dict, blank=True)
     gaps = models.JSONField(default=list, blank=True)
+    matched_skills = models.JSONField(default=list, blank=True)
+    explanation = models.JSONField(default=list, blank=True)
     model_version = models.CharField(max_length=64, default='v1')
     created_at = models.DateTimeField(auto_now_add=True)
 

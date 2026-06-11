@@ -53,8 +53,14 @@ const ghostJobDetail = {
 
 const match = {
   score: 0.82,
-  breakdown: { skills: 0.9, title: 0.7 },
+  breakdown: { semantic: 0.74, skill_overlap: 0.66 },
   gaps: ['Kubernetes', 'gRPC'],
+  matched_skills: ['python', 'django'],
+  explanation: [
+    { kind: 'positive', title: 'Skill coverage 66%', detail: 'Your resume matches 2 of 3 skills the role asks for: python, django' },
+    { kind: 'negative', title: '1 skill gap', detail: 'Not found in your resume: Kubernetes, gRPC' },
+    { kind: 'positive', title: 'Text similarity 74%', detail: 'How closely your resume wording mirrors the job description overall.' },
+  ],
 };
 
 const applications = [

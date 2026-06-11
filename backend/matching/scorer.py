@@ -54,4 +54,48 @@ def score_resume_against_job(parsed_resume: dict, job_title: str, job_descriptio
         'score': score,
         'breakdown': {'semantic': round(semantic, 4), 'skill_overlap': round(overlap, 4)},
         'gaps': sorted(jd_skill_set - resume_skill_set),
+        'matched_skills': sorted(resume_skill_set & jd_skill_set),
+        'explanation': _build_explanation(
+            semantic, overlap,
+            sorted(resume_skill_set & jd_skill_set),
+            sorted(jd_skill_set - resume_skill_set),
+            len(jd_skill_set),
+        ),
     }
+
+
+def _build_explanation(semantic: float, overlap: float, matched: list[str],
+                       missing: list[str], jd_skill_count: int) -> list[dict]:
+    """Human-readable reasons behind the score, for the match-explainability UI.
+
+    Each item is {kind: positive|negative|neutral, title, detail}; the UI
+    renders them as a colour-coded list so a candidate sees *why* a job
+    scored as it did, not just a number."""
+    items: list[dict] = []
+    if jd_skill_count:
+        items.append({
+            'kind': 'positive' if overlap >= 0.5 else 'negative',
+            'title': f'Skill coverage {round(overlap * 100)}%',
+            'detail': (
+                f'Your resume matches {len(matched)} of {jd_skill_count} skills the role asks for'
+                + (f': {", ".join(matched)}' if matched else '.')
+            ),
+        })
+        if missing:
+            items.append({
+                'kind': 'negative',
+                'title': f'{len(missing)} skill gap{"s" if len(missing) != 1 else ""}',
+                'detail': 'Not found in your resume: ' + ', '.join(missing),
+            })
+    else:
+        items.append({
+            'kind': 'neutral',
+            'title': 'No explicit skills detected in the listing',
+            'detail': 'Score is based on overall text similarity to the job description.',
+        })
+    items.append({
+        'kind': 'positive' if semantic >= 0.5 else 'neutral',
+        'title': f'Text similarity {round(semantic * 100)}%',
+        'detail': 'How closely your resume wording mirrors the job description overall.',
+    })
+    return items

@@ -45,3 +45,37 @@ def test_score_infers_jd_skills_when_not_provided():
 
     assert out['breakdown']['skill_overlap'] == 0.5
     assert out['gaps'] == ['docker', 'kafka']
+
+
+def test_score_explains_matched_skills_and_gaps():
+    parsed = {
+        'summary': 'Backend engineer with Python and Django experience',
+        'skills': [{'name': 'Python'}, {'name': 'Django'}],
+    }
+    out = score_resume_against_job(
+        parsed,
+        job_title='Senior Backend Engineer',
+        job_description='Build microservices with Python, Django, Kafka',
+        jd_skills=['Python', 'Django', 'Kafka'],
+    )
+
+    assert out['matched_skills'] == ['django', 'python']
+    assert out['gaps'] == ['kafka']
+    kinds = {item['kind'] for item in out['explanation']}
+    titles = ' '.join(item['title'] for item in out['explanation'])
+    assert 'Skill coverage' in titles
+    assert 'skill gap' in titles.lower()
+    assert 'Text similarity' in titles
+    # a real gap produces at least one negative reason
+    assert 'negative' in kinds
+
+
+def test_explanation_handles_no_detected_skills():
+    out = score_resume_against_job(
+        {'summary': 'Generalist', 'skills': []},
+        job_title='Role',
+        job_description='Some prose with no recognised tech skills.',
+        jd_skills=[],
+    )
+    assert out['matched_skills'] == []
+    assert any('No explicit skills' in item['title'] for item in out['explanation'])

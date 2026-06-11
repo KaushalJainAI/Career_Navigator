@@ -23,6 +23,12 @@ class JobMatchView(APIView):
         result = score_resume_against_job(master.parsed_json, job.title, job.description)
         score, _ = MatchScore.objects.update_or_create(
             user=request.user, job=job,
-            defaults={'score': result['score'], 'breakdown': result['breakdown'], 'gaps': result['gaps']},
+            defaults={
+                'score': result['score'],
+                'breakdown': result['breakdown'],
+                'gaps': result['gaps'],
+                'matched_skills': result['matched_skills'],
+                'explanation': result['explanation'],
+            },
         )
         return Response(MatchScoreSerializer(score).data)
