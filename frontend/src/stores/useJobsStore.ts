@@ -8,6 +8,8 @@ interface Job {
   location: string;
   remote: boolean;
   apply_url: string;
+  ghost_risk?: number;
+  ghost_band?: 'low' | 'medium' | 'high';
 }
 
 interface JobsState {

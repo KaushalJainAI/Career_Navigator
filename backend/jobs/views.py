@@ -10,7 +10,7 @@ class JobListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['title', 'company__name', 'location']
-    ordering_fields = ['posted_at', 'created_at']
+    ordering_fields = ['posted_at', 'created_at', 'ghost_risk']
 
     def get_queryset(self):
         qs = JobPosting.objects.select_related('company', 'source')
@@ -20,6 +20,13 @@ class JobListView(generics.ListAPIView):
         location = self.request.query_params.get('location')
         if location:
             qs = qs.filter(location__icontains=location)
+        # Ghost-Job Shield: let callers cap the ghost-risk of returned jobs.
+        max_ghost_risk = self.request.query_params.get('max_ghost_risk')
+        if max_ghost_risk is not None:
+            try:
+                qs = qs.filter(ghost_risk__lte=int(max_ghost_risk))
+            except ValueError:
+                pass
         # Honour stealth_domains from the user's UserProfile
         domains = getattr(getattr(self.request.user, 'cn_profile', None), 'stealth_domains', []) or []
         if domains:

@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 
 class ATSType(models.TextChoices):
@@ -60,6 +61,17 @@ class JobPosting(models.Model):
     posted_at = models.DateTimeField(null=True, blank=True)
     raw = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # Ghost-Job Shield: liveness + repost tracking and the derived risk score.
+    # first_seen_at is the moment we first saw THIS copy (resets when the JD
+    # text/salary changes); last_seen_at is the most recent ingestion run that
+    # still carried it; content_fingerprint detects unchanged-copy reposts.
+    first_seen_at = models.DateTimeField(default=timezone.now, db_index=True)
+    last_seen_at = models.DateTimeField(default=timezone.now)
+    content_fingerprint = models.CharField(max_length=64, blank=True, db_index=True)
+    repost_count = models.PositiveIntegerField(default=0)
+    ghost_risk = models.PositiveSmallIntegerField(default=0, db_index=True)
+    ghost_reasons = models.JSONField(default=list, blank=True)
 
     class Meta:
         unique_together = [('source', 'external_id')]

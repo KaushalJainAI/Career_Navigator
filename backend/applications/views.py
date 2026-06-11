@@ -3,6 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from jobs.ghost import band_for
 from jobs.models import JobPosting
 from matching.models import MatchScore
 
@@ -83,6 +84,7 @@ class PrepareApplicationView(APIView):
             update_fields.append('auto_apply_session')
 
         app.save(update_fields=update_fields)
+        ghost_band = band_for(job.ghost_risk)
         ApplicationEvent.objects.create(
             application=app,
             type=f'{tier}_prepared',
@@ -91,6 +93,8 @@ class PrepareApplicationView(APIView):
                 'apply_url': job.apply_url,
                 'requires_extension': tier == AutoApplyTier.AUTOFILL,
                 'requires_approval': tier == AutoApplyTier.AUTONOMOUS,
+                'ghost_risk': job.ghost_risk,
+                'ghost_band': ghost_band,
             },
         )
 
@@ -100,7 +104,10 @@ class PrepareApplicationView(APIView):
             'status': app.status,
             'apply_url': job.apply_url,
             'approval_token': approval_token,
-            'next_actions': self._next_actions(tier, job),
+            'ghost_risk': job.ghost_risk,
+            'ghost_band': ghost_band,
+            'ghost_reasons': job.ghost_reasons,
+            'next_actions': self._next_actions(tier, job, ghost_band),
         }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
     @staticmethod
@@ -110,23 +117,29 @@ class PrepareApplicationView(APIView):
         return ApplicationStatus.READY
 
     @staticmethod
-    def _next_actions(tier: str, job: JobPosting) -> list[str]:
+    def _next_actions(tier: str, job: JobPosting, ghost_band: str = 'low') -> list[str]:
         if tier == AutoApplyTier.ASSIST:
-            return [
+            actions = [
                 'Review the job description and match gaps.',
                 'Generate a tailored resume or cover letter.',
                 'Open the apply link when ready.',
             ]
-        if tier == AutoApplyTier.AUTOFILL:
-            return [
+        elif tier == AutoApplyTier.AUTOFILL:
+            actions = [
                 'Open the apply link in a browser with the Career Navigator extension installed.',
                 'Use extension autofill, review every field, then submit yourself.',
             ]
-        return [
-            'Review the prepared application package.',
-            'Approve only after confirming every field is accurate.',
-            f'Application is paused before submit for {job.company.name}.',
-        ]
+        else:
+            actions = [
+                'Review the prepared application package.',
+                'Approve only after confirming every field is accurate.',
+                f'Application is paused before submit for {job.company.name}.',
+            ]
+        # Ghost-Job Shield: caution the user before they spend effort on a
+        # likely ghost job, and put it first so it isn't missed.
+        if ghost_band == 'high':
+            actions.insert(0, 'Caution: high ghost-job risk — verify this role is genuinely open before applying.')
+        return actions
 
 
 class DashboardStatsView(APIView):

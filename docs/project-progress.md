@@ -13,6 +13,13 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 ## Recently Completed
 
 - Created this project progress tracker.
+- Ghost-Job Shield — flagship Phase 2 feature shipped (2026-06-11):
+  - New `backend/jobs/ghost.py`: deterministic, network-free ghost-risk scorer (0–100 + low/medium/high band + human-readable reasons) over content fingerprinting, copy-staleness, repost cycles, missing salary, and evergreen/red-flag JD language. Subsumes the previously-separate JD red-flag detector.
+  - `JobPosting` gains liveness fields (`first_seen_at`, `last_seen_at`, `content_fingerprint`, `repost_count`, `ghost_risk`, `ghost_reasons`) + migration `jobs/0002`. `first_seen_at` resets only when the JD copy/salary changes, so staleness measures the age of *this* copy.
+  - `ingestion/services.upsert_postings` now computes the fingerprint, tracks first/last seen, detects take-down-and-repost cycles (same fingerprint under another source/external_id for the same company), and stores the risk score — all inside the existing idempotent upsert.
+  - API: `JobPostingSerializer` exposes `ghost_risk`/`ghost_band`/`ghost_reasons`; `JobListView` adds `ordering=ghost_risk` and a `max_ghost_risk` filter; the apply-prepare path returns the risk and prepends a caution to `next_actions` for high-risk roles (HITL-friendly deprioritization).
+  - Frontend: reusable `GhostRiskBadge` on the jobs list and job detail, with a reasons panel + warning banner for high-risk postings.
+  - Tests: `jobs/tests/test_ghost.py` (unit), repost/staleness/missing-salary integration in `ingestion/tests/test_services.py`, a prepare-endpoint caution test, and two Playwright specs (`ghost-shield.spec.ts`).
 - Playwright E2E expansion (2026-06-11):
   - Grew the suite from 2 smoke tests to 7 by adding flow coverage for the core Phase 2 surfaces: onboarding chat (user message → assistant reply), job-detail tailoring (match score → assist-apply prepare → generate resume + cover letter, plus the autonomous approval-token paused state), applications Kanban status change (asserts the `PATCH /applications/:id/` body and the optimistic board update), and the full Interview Grill loop (start → answer each question with feedback → report).
   - Reworked `frontend/e2e/api-mocks.ts` into a method-aware router (GET/POST/PATCH) covering job detail, matching, prepare, tailoring, interview sessions/answer/report, and agent onboarding endpoints. All 7 tests pass; no real network.
@@ -162,7 +169,7 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 
 ### Phase 2 Discovery Sources
 
-- Adzuna, Greenhouse, Jooble, JSearch, and Lever backend adapters are implemented and registered in `ingestion/tasks.py::ADAPTER_REGISTRY`, with `httpx.MockTransport` unit tests (normalise + fetch paging, no-key skip, and failure branches), a fetch→DB integration test, and a shared resilient base layer (149 backend tests passing as of 2026-06-11).
+- Adzuna, Greenhouse, Jooble, JSearch, and Lever backend adapters are implemented and registered in `ingestion/tasks.py::ADAPTER_REGISTRY`, with `httpx.MockTransport` unit tests (normalise + fetch paging, no-key skip, and failure branches), a fetch→DB integration test, and a shared resilient base layer (163 backend tests passing as of 2026-06-11, including the Ghost-Job Shield suite).
 - Greenhouse and Lever were smoke-tested live against real public boards on 2026-06-11 (stripe: 496 postings, mistral: 173, all contract-valid) via `backend/scripts/smoke_adapters.py`.
 - Jooble/JSearch need API keys (`JOOBLE_API_KEY`, `JSEARCH_RAPIDAPI_KEY`) before a live smoke run; production ingestion also needs `LEVER_TOKENS`/`GREENHOUSE_TOKENS` set to the boards we want to track.
 - Playwright scraper framework, email-forward parsing, and web-search/CLI-delegate fallback are planned but not implemented.
@@ -212,7 +219,7 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 - Weekly career-coach digest.
 - Salary negotiation rehearsal.
 - Voice mode for Interview Grill.
-- JD red-flag detector.
+- ~~JD red-flag detector~~ — shipped 2026-06-11 as part of the Ghost-Job Shield (`jobs/ghost.py` red-flag + evergreen language signals).
 - Real-LLM evaluation suite for tailoring quality.
 
 ### Data and Integrations

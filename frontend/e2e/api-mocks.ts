@@ -31,6 +31,24 @@ const jobDetail = {
   description: '<p>Build resilient ingestion pipelines.</p>',
   apply_url: 'https://acme.example/careers/101',
   company: { id: 1, name: 'Acme Labs', domain: 'acme.example' },
+  ghost_risk: 12,
+  ghost_band: 'low',
+  ghost_reasons: [],
+};
+
+const ghostJobDetail = {
+  id: 999,
+  title: 'Backend Engineer',
+  description: '<p>Join our talent pool for future opportunities.</p>',
+  apply_url: 'https://ghosty.example/careers/999',
+  company: { id: 9, name: 'Ghosty Inc', domain: 'ghosty.example' },
+  ghost_risk: 80,
+  ghost_band: 'high',
+  ghost_reasons: [
+    'Same copy live for 90 days (over 60)',
+    'No salary range disclosed',
+    'Evergreen/pipeline language: future opportunities, talent pool',
+  ],
 };
 
 const match = {
@@ -85,7 +103,7 @@ export async function mockCareerNavigatorApi(page: Page) {
       return json(route, jobs);
     }
     if (method === 'GET' && /^\/api\/v1\/jobs\/\d+\/$/.test(path)) {
-      return json(route, jobDetail);
+      return json(route, path.includes('/999/') ? ghostJobDetail : jobDetail);
     }
     if (method === 'GET' && /^\/api\/v1\/matching\/jobs\/\d+\/$/.test(path)) {
       return json(route, match);

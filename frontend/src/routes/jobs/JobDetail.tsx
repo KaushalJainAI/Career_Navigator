@@ -2,6 +2,7 @@ import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, ExternalLink, ShieldCheck } from 'lucide-react';
 import { Jobs, Applications, Tailoring } from '../../api/endpoints';
+import { GhostRiskBadge, type GhostBand } from '../../components/GhostRiskBadge';
 
 interface Job {
   id: number;
@@ -9,6 +10,9 @@ interface Job {
   description: string;
   apply_url: string;
   company: { name: string };
+  ghost_risk?: number;
+  ghost_band?: GhostBand;
+  ghost_reasons?: string[];
 }
 
 interface Match {
@@ -78,8 +82,21 @@ export function JobDetail() {
     <section className="space-y-5">
       <div>
         <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{job.title}</h1>
-        <div className="mt-2 text-sm font-semibold text-slate-600 sm:text-base">{job.company?.name}</div>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <span className="text-sm font-semibold text-slate-600 sm:text-base">{job.company?.name}</span>
+          {typeof job.ghost_risk === 'number' && (
+            <GhostRiskBadge score={job.ghost_risk} band={job.ghost_band} reasons={job.ghost_reasons} showScore />
+          )}
+        </div>
       </div>
+      {typeof job.ghost_risk === 'number' && (job.ghost_band ?? '') === 'high' && job.ghost_reasons?.length ? (
+        <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-800">
+          <div className="font-black">High ghost-job risk — verify this role is genuinely open before investing time.</div>
+          <ul className="mt-2 list-disc pl-5">
+            {job.ghost_reasons.map((reason) => <li key={reason}>{reason}</li>)}
+          </ul>
+        </div>
+      ) : null}
       {match && (
         <div className="rounded-2xl bg-white p-4 shadow-sm">
           <div className="font-medium">Match score: {(match.score * 100).toFixed(0)}%</div>

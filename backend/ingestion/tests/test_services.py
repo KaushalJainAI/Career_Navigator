@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 import httpx
 import pytest
+from django.utils import timezone
 
 from ingestion.adapters.base import AdapterContext
 from ingestion.adapters.lever import LeverAdapter
@@ -69,3 +72,73 @@ def test_run_adapter_integration_fetch_to_db():
     rerun = run_adapter(source, adapter, AdapterContext())
     assert rerun.stats == {'created': 0, 'updated': 1, 'skipped': 1}
     assert JobPosting.objects.count() == 1
+
+
+def _posting(external_id, *, title='Backend Engineer', description='Build services.',
+             salary_min=120000, salary_max=160000, company='Acme'):
+    return {
+        'external_id': external_id,
+        'title': title,
+        'description': description,
+        'salary_min': salary_min,
+        'salary_max': salary_max,
+        'company': {'name': company, 'domain': '', 'ats_type': 'other'},
+        'raw': {},
+    }
+
+
+def test_upsert_tracks_liveness_and_fingerprint():
+    source = Source.objects.create(name='adzuna', kind='aggregator')
+    upsert_postings(source, [_posting('a')])
+    job = JobPosting.objects.get(external_id='a')
+    assert job.content_fingerprint
+    assert job.first_seen_at is not None
+    assert job.last_seen_at is not None
+    assert job.repost_count == 0
+
+
+def test_unchanged_copy_keeps_first_seen_but_advances_last_seen():
+    source = Source.objects.create(name='adzuna', kind='aggregator')
+    upsert_postings(source, [_posting('a')])
+    job = JobPosting.objects.get(external_id='a')
+    original_first_seen = job.first_seen_at
+
+    # force a later run by ageing first_seen into the past
+    JobPosting.objects.filter(pk=job.pk).update(
+        first_seen_at=original_first_seen - timedelta(days=50),
+    )
+    upsert_postings(source, [_posting('a')])  # identical copy
+    job.refresh_from_db()
+    # same copy → first_seen preserved, so staleness accrues and risk rises
+    assert job.first_seen_at == original_first_seen - timedelta(days=50)
+    assert job.ghost_risk >= 25
+    assert any('live for' in r for r in job.ghost_reasons)
+
+
+def test_changed_copy_resets_first_seen():
+    source = Source.objects.create(name='adzuna', kind='aggregator')
+    upsert_postings(source, [_posting('a', description='Original copy.')])
+    job = JobPosting.objects.get(external_id='a')
+    JobPosting.objects.filter(pk=job.pk).update(
+        first_seen_at=job.first_seen_at - timedelta(days=50),
+    )
+    upsert_postings(source, [_posting('a', description='Rewritten fresh copy.')])
+    job.refresh_from_db()
+    # new copy → first_seen reset to now, staleness reason gone
+    assert (timezone.now() - job.first_seen_at) < timedelta(days=1)
+    assert not any('live for' in r for r in job.ghost_reasons)
+
+
+def test_repost_under_new_id_raises_ghost_risk():
+    source_a = Source.objects.create(name='greenhouse', kind='ats_public')
+    source_b = Source.objects.create(name='lever', kind='ats_public')
+    # identical copy, same company, two different (source, external_id) pairs,
+    # neither with a salary range → repost signal + missing-salary signal
+    payload = _posting('orig', salary_min=None, salary_max=None)
+    upsert_postings(source_a, [payload])
+    upsert_postings(source_b, [dict(payload, external_id='repost')])
+
+    repost = JobPosting.objects.get(external_id='repost')
+    assert repost.repost_count >= 1
+    assert repost.ghost_risk >= 50  # 30 repost + 20 missing salary
+    assert any('reposted' in r.lower() for r in repost.ghost_reasons)

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useJobsStore } from '../../stores/useJobsStore';
 import { Link } from 'react-router-dom';
 import { Search, MapPin, Building, ChevronRight } from 'lucide-react';
+import { GhostRiskBadge } from '../../components/GhostRiskBadge';
 
 export function JobsList() {
   const { jobs, fetch, loading } = useJobsStore();
@@ -76,6 +77,9 @@ export function JobsList() {
                         <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-medium rounded text-xs border border-emerald-100">
                           Remote
                         </span>
+                      )}
+                      {typeof j.ghost_risk === 'number' && j.ghost_risk >= 30 && (
+                        <GhostRiskBadge score={j.ghost_risk} band={j.ghost_band} />
                       )}
                     </div>
                   </div>

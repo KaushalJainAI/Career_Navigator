@@ -98,3 +98,27 @@ def test_prepare_autonomous_application_issues_approval_token(auth_client, user)
     assert app.auto_apply_session is not None
     assert app.auto_apply_session.state == 'waiting_approval'
     assert app.events.filter(type='autonomous_prepared').exists()
+
+
+def test_prepare_surfaces_ghost_risk_and_cautions_high_risk(auth_client, user):
+    company, _ = Company.objects.get_or_create(name='Ghosty', domain='ghosty.com')
+    source, _ = Source.objects.get_or_create(name='greenhouse-ghosty', kind='ats_public')
+    job = JobPosting.objects.create(
+        source=source, external_id='ghost-1', company=company,
+        title='Backend Engineer', location='Remote',
+        ghost_risk=72, ghost_reasons=['Same copy live for 90 days (over 60)'],
+    )
+
+    response = auth_client.post('/api/v1/applications/prepare/', {
+        'job_id': job.id,
+        'tier': 'assist',
+    }, format='json')
+
+    assert response.status_code == 201
+    assert response.data['ghost_risk'] == 72
+    assert response.data['ghost_band'] == 'high'
+    assert response.data['ghost_reasons']
+    assert 'ghost-job risk' in response.data['next_actions'][0].lower()
+    assert Application.objects.get(user=user, job=job).events.filter(
+        type='assist_prepared', payload__ghost_band='high',
+    ).exists()
