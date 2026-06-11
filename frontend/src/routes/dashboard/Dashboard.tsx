@@ -11,12 +11,23 @@ interface DashboardStats {
   offers_received: number;
 }
 
+interface ResponseAnalytics {
+  submitted: number;
+  responses: number;
+  offers: number;
+  response_rate: number;
+  funnel: { applied: number; phone: number; onsite: number; offer: number };
+  avg_days_to_first_response: number | null;
+}
+
 export function Dashboard() {
   const { jobs, fetch, loading } = useJobsStore();
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [analytics, setAnalytics] = useState<ResponseAnalytics | null>(null);
   useEffect(() => { fetch({ remote: true }); }, [fetch]);
   useEffect(() => {
     Applications.stats().then(setStats).catch(() => undefined);
+    Applications.analytics().then(setAnalytics).catch(() => undefined);
   }, []);
 
   const kpis = [
@@ -81,6 +92,50 @@ export function Dashboard() {
         })}
       </section>
 
+      {analytics && analytics.submitted > 0 && (
+        <section className="rounded-[1.25rem] border border-slate-900/10 bg-white p-5 shadow-sm sm:rounded-[1.5rem] sm:p-6" data-testid="response-analytics">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-xl font-black tracking-tight text-slate-950 sm:text-2xl">Response analytics</h2>
+            <span className="text-sm font-bold text-slate-500">
+              {analytics.avg_days_to_first_response != null
+                ? `Avg ${analytics.avg_days_to_first_response} days to first response`
+                : 'No responses yet'}
+            </span>
+          </div>
+          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label="Submitted" value={analytics.submitted} />
+            <Stat label="Responses" value={analytics.responses} />
+            <Stat label="Offers" value={analytics.offers} />
+            <Stat label="Response rate" value={`${Math.round(analytics.response_rate * 100)}%`} />
+          </div>
+          <div className="flex items-end gap-2">
+            {([
+              ['Applied', analytics.funnel.applied],
+              ['Phone', analytics.funnel.phone],
+              ['Onsite', analytics.funnel.onsite],
+              ['Offer', analytics.funnel.offer],
+            ] as const).map(([label, count]) => {
+              const pct = analytics.funnel.applied
+                ? Math.round((count / analytics.funnel.applied) * 100)
+                : 0;
+              return (
+                <div key={label} className="flex-1 text-center">
+                  <div className="flex h-24 items-end justify-center">
+                    <div
+                      className="w-full rounded-t-lg bg-teal-500/80"
+                      style={{ height: `${Math.max(pct, 4)}%` }}
+                      data-testid={`funnel-${label.toLowerCase()}`}
+                    />
+                  </div>
+                  <div className="mt-2 text-sm font-black text-slate-900">{count}</div>
+                  <div className="text-xs font-bold text-slate-500">{label}</div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       <section>
         <div className="mb-4 flex items-center justify-between">
           <div>
@@ -118,6 +173,15 @@ export function Dashboard() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <div className="text-2xl font-black tracking-tight text-slate-950">{value}</div>
+      <div className="mt-0.5 text-xs font-bold text-slate-500">{label}</div>
     </div>
   );
 }

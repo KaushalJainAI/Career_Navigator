@@ -7,6 +7,7 @@ from jobs.ghost import band_for
 from jobs.models import JobPosting
 from matching.models import MatchScore
 
+from .analytics import build_response_analytics
 from .models import Application, ApplicationEvent, ApplicationStatus, AutoApplySession, AutoApplyTier
 from .serializers import ApplicationSerializer
 
@@ -165,3 +166,15 @@ class DashboardStatsView(APIView):
             'saved_jobs': applications.filter(status=ApplicationStatus.SAVED).count(),
             'total_jobs': JobPosting.objects.count(),
         })
+
+
+class ResponseAnalyticsView(APIView):
+    """Funnel + response-rate analytics over the user's applications, including a
+    per-tier breakdown (assist / autofill / autonomous) and average days to a
+    first interview response."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        applications = Application.objects.filter(user=request.user).prefetch_related('events')
+        return Response(build_response_analytics(applications))

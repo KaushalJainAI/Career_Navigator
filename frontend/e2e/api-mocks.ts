@@ -105,6 +105,20 @@ export async function mockCareerNavigatorApi(page: Page) {
         offers_received: 0,
       });
     }
+    if (method === 'GET' && path === '/api/v1/applications/analytics/') {
+      return json(route, {
+        total: 8,
+        submitted: 6,
+        responses: 2,
+        offers: 1,
+        rejections: 2,
+        response_rate: 0.3333,
+        offer_rate: 0.1667,
+        funnel: { applied: 6, phone: 2, onsite: 1, offer: 1 },
+        by_tier: { assist: { submitted: 6, responses: 2, offers: 1, response_rate: 0.3333 } },
+        avg_days_to_first_response: 7.5,
+      });
+    }
     if (method === 'GET' && path === '/api/v1/jobs/') {
       return json(route, jobs);
     }

@@ -67,6 +67,7 @@ export const Jobs = {
 export const Applications = {
   list: () => api.get('/applications/').then((r) => r.data),
   stats: () => api.get('/applications/stats/').then((r) => r.data),
+  analytics: () => api.get('/applications/analytics/').then((r) => r.data),
   prepare: (jobId: number, tier: 'assist' | 'autofill' | 'autonomous') =>
     api.post('/applications/prepare/', { job_id: jobId, tier }).then((r) => r.data),
   create: (jobId: number, tier?: string) =>
