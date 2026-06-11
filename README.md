@@ -6,11 +6,29 @@ Patterned on the AIAAS Django/Channels/Celery + React/Zustand stack and Faultlin
 
 > 📖 **New here? Start with [docs/vision.md](docs/vision.md)** for the *why*, then [docs/architecture.md](docs/architecture.md) for the *how*.
 
+## Features
+
+| Area | What ships | Status |
+|---|---|---|
+| **Discovery** | Unified ingestion from aggregator APIs (Adzuna, Jooble, JSearch), ATS APIs (Greenhouse, Lever), JobSpy-wrapped big boards, email forwards, and one-click extension capture from any careers page | Adapters live; JobSpy + capture planned (Phase 2) |
+| **Ghost-Job Shield** | Repost fingerprinting, staleness tracking, missing-salary heuristics → ghost-risk score on every job card; auto-apply deprioritizes high-risk postings | Planned (Phase 2 flagship) |
+| **Matching** | Lexical + skill-overlap resume↔JD scoring; already emits a missing-skill `gaps` list, with richer matched/missing-keyword explanation, UI rendering, and a direct feed into tailoring planned | Scoring + gaps live; full explainability planned |
+| **Tailoring** | Per-JD resume + cover-letter generation with audit-trail diffs and a deterministic truthfulness verification pass (identity fields and claimed skills must match the profile — fails closed) | Generation live; verification pass planned |
+| **ATS-safe export** | JSON resume schema → single-column server-rendered templates → round-trip parse test | Planned (Phase 2) |
+| **Tiered apply** | `assist` (human submits) → `autofill` (extension fills, never overwrites user input) → `autonomous` (agent submits, hard-gated on a per-application approval token) | Live |
+| **Tracking & analytics** | Applications Kanban + outcome-first dashboard: response rate per resume variant, time-to-first-interview, stage conversion — never "applications sent" as the headline | Kanban live; analytics planned |
+| **Interview Grill Agent** | Company-researched question banks, live grilling rounds with STAR-rubric evaluation, persisted post-session reports + study plans; voice mode in Phase 3. Preparation only — no live-interview copilot | Text mode live |
+| **Stealth mode** | Employer domains filtered from every list endpoint at the query level | Live |
+| **Trust** | Encrypted credentials vault, HITL hard-gate on submission (test-enforced), BYOK/local-model option, honest billing (self-serve cancel, rolling credits) | Vault + gate live; billing planned |
+
+How these choices position us against AIHawk, JobSpy, Resume-Matcher, Reactive-Resume, ApplyPilot, Teal/Huntr/Simplify/Careerflow, and Final Round AI — and the user-reported shortcomings of each we engineer against — is documented in [docs/competitive-landscape.md](docs/competitive-landscape.md).
+
 ## Documentation
 
 | Doc | Read when… |
 |---|---|
 | [docs/vision.md](docs/vision.md) | You want the product thesis, target user, and design principles. |
+| [docs/competitive-landscape.md](docs/competitive-landscape.md) | You want the competitor comparison, what we borrow from each, and the shortcomings we engineer against. |
 | [docs/architecture.md](docs/architecture.md) | You're orienting on the system: processes, apps, URLs, data flows. |
 | [docs/agent.md](docs/agent.md) | You're touching anything LLM-facing or the autonomous-apply path. |
 | [docs/job-search-skills-workflows-plan.md](docs/job-search-skills-workflows-plan.md) | You want the built-in job search, referral, outreach, and apply-agent workflow plan. |
@@ -76,7 +94,7 @@ Every app ships unit tests in `<app>/tests/test_*.py`. Full policy: [docs/testin
 
 ## Apps overview
 
-16 Django apps. Detailed entity model in [docs/data-model.md](docs/data-model.md); detailed orchestration in [docs/agent.md](docs/agent.md).
+18 Django apps. Detailed entity model in [docs/data-model.md](docs/data-model.md); detailed orchestration in [docs/agent.md](docs/agent.md).
 
 | App | Purpose |
 |---|---|
@@ -84,7 +102,7 @@ Every app ships unit tests in `<app>/tests/test_*.py`. Full policy: [docs/testin
 | [`profiles`](backend/profiles/) | StructuredProfile + Experience/Education/Skill/Project/Preference |
 | [`resumes`](backend/resumes/) | Upload + parse (PDF/DOCX) + versioning |
 | [`jobs`](backend/jobs/) | Company, Source, JobPosting |
-| [`ingestion`](backend/ingestion/) | Adapters (Adzuna, Greenhouse; Phase 2 adds Jooble/JSearch/Lever/scraper/email/web-search/CLI-delegate). See [docs/adapters.md](docs/adapters.md). |
+| [`ingestion`](backend/ingestion/) | Adapters (Adzuna, Greenhouse, Jooble, JSearch, Lever; Phase 2 adds JobSpy wrapper/scraper/email/web-search/CLI-delegate). See [docs/adapters.md](docs/adapters.md). |
 | [`matching`](backend/matching/) | Resume↔JD scorer (lexical + skill-overlap; LLM rerank optional) + MatchScore |
 | [`notifications`](backend/notifications/) | Subscription DSL, Alert, web-push, Channels |
 | [`applications`](backend/applications/) | Application + AutoApplySession (approval token) + ApplicationEvent |
@@ -97,6 +115,7 @@ Every app ships unit tests in `<app>/tests/test_*.py`. Full policy: [docs/testin
 | [`vault`](backend/vault/) | Faultline-style AuthFlow per portal (Phase 3) |
 | [`billing`](backend/billing/) | Stripe + credit ledger |
 | [`streaming`](backend/streaming/) | Channels WebSocket consumers (notifications, interview) |
+| [`ai`](backend/ai/) | Shared LLM provider transports (NVIDIA, CLI delegates, fallback) injected as `llm=` callables |
 
 ## Phases
 

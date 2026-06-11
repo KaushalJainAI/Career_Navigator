@@ -2,15 +2,18 @@
 
 ## The problem
 
-Modern job hunting is a fragmented, demoralising pipeline. A serious candidate runs into the same five frictions on every cycle:
+Modern job hunting is a fragmented, demoralising pipeline. A serious candidate runs into the same six frictions on every cycle:
 
 1. **Discovery noise** — LinkedIn churn, Indeed spam, three aggregators, the company's own career page, plus a hidden job market on Twitter/Slack/referrals. Nothing unifies them.
-2. **Resume rewriting fatigue** — every JD wants something slightly different, and the candidate either over-tailors (slow) or under-tailors (low conversion).
-3. **ATS form drudgery** — Workday, Greenhouse, and Lever ask the same 40 fields in 40 different shapes. Apply to 50 jobs and you've spent a weekend typing your address.
-4. **Interview prep guesswork** — generic prep guides don't tell you what *this* company *actually* asks. Glassdoor is half-stale, Blind is anecdote.
-5. **No feedback loop** — applications go into a void. You can't tell which resume variant works, which JDs are red flags, which weeks are wasted.
+2. **Ghost jobs** — an estimated 18–27% of active postings are roles nobody intends to fill; nearly 1 in 3 employers admit posting without hiring intent. Candidates spray applications into voids and conclude *they* are the problem. No existing tool filters these out.
+3. **Resume rewriting fatigue** — every JD wants something slightly different, and the candidate either over-tailors (slow) or under-tailors (low conversion).
+4. **ATS form drudgery** — Workday, Greenhouse, and Lever ask the same 40 fields in 40 different shapes. Apply to 50 jobs and you've spent a weekend typing your address.
+5. **Interview prep guesswork** — generic prep guides don't tell you what *this* company *actually* asks. Glassdoor is half-stale, Blind is anecdote.
+6. **No feedback loop** — applications go into a void. You can't tell which resume variant works, which JDs are red flags, which weeks are wasted.
 
 Existing tools tackle slices: **Teal** does tracking, **Jobscan** does keyword matching, **Simplify** does autofill, **Final Round AI** does mock interviews. None of them sit on top of a single agent that *researches the company*, *tailors the resume*, *files the application*, *coaches the interview*, and *learns from outcomes* — with the candidate in the driver's seat.
+
+And the tools that exist are squandering user trust — their own users' reviews show recurring patterns of hallucinated resume content, unapproved AI edits, automation that embarrasses the candidate in front of recruiters, and hostile billing. The full competitor-by-competitor analysis, including what we borrow from each and the shortcomings we engineer against, lives in [competitive-landscape.md](./competitive-landscape.md).
 
 ## The thesis
 
@@ -42,9 +45,11 @@ These are the invariants that should survive every refactor.
 
 Every submit goes through a human approval gate by default. The `HITL_HARD_GATE` mechanism in `backend/agent/tools/registry.py` is non-negotiable — *no* tool that takes irreversible action runs without a token issued by an authenticated user action. The default tier on a new application is `assist`, not `autonomous`.
 
-### 2. Truthful tailoring
+### 2. Truthful tailoring — verified, not just prompted
 
 A tailored resume reorders, rephrases, and emphasises — it never fabricates. Prompts in `backend/tailoring/generators.py` carry "preserving truthfulness" as a hard instruction. The diff between master and tailored is stored on `TailoredResume.diff_from_master` so the candidate can audit what changed.
+
+Prompting alone is not enough — Teal ships cover letters that misspell the user's own name, and Careerflow applies inaccurate AI edits to resumes without approval. So truthfulness is also **deterministically verified post-generation**: identity fields (name, contact, employers, titles, dates) must exactly match the profile; skills claimed in tailored output must exist in the profile (JD-only skills become *suggestions to learn*, never silent insertions); and no AI edit is applied to stored materials without the user seeing the diff. These checks need no LLM and fail closed.
 
 ### 3. Phase-gated capability
 
@@ -70,6 +75,18 @@ Every Django app ships unit tests in the same commit as the feature. Tests never
 
 Currently-employed users add their employer domain to `stealth_domains`; postings from that domain are filtered out of every list endpoint *at the query level*. Email digests, web-push, the dashboard, and the agent's job-search tool all honour the same filter. Easy to break, easy to test, hugely trust-building when it works.
 
+### 9. The agent never speaks as the candidate without review
+
+AIHawk's bot auto-replied to real recruiters reaching out for phone screens — the automation embarrassed the very users it served. Our agent never autonomously sends messages on the candidate's channels. Outreach and replies are draft-only behind `HITL_CONFIRM`; a human always presses send on anything a recruiter will read.
+
+### 10. Outcomes are the metric, not volume
+
+Simplify users autofill 100+ applications and report a 0% hit rate; the tool optimized the wrong number. Our dashboard leads with response rate per resume variant, time-to-first-interview, and stage conversion — never "applications sent" as a success measure. Auto-apply queues deprioritize ghost-risk postings rather than maximizing throughput.
+
+### 11. Billing trust is a feature
+
+The most common one-star theme across Teal, Huntr, Simplify+, and Final Round AI is billing hostility: charges after cancellation, expiring credits, unreachable support, advertised guarantees contradicted by fine print. When billing ships here: one-click self-serve cancel, credits roll over while subscribed, a one-sentence refund policy honoured programmatically, no rebilling dark patterns. In a category where users call the market leader a scam, boring honesty is cheap differentiation.
+
 ## The Interview Grill Chat Agent (north star feature)
 
 The single most differentiated feature in the product. Existing interview-prep tools give you a generic list of "behavioural questions." The Grill agent:
@@ -84,7 +101,7 @@ Phase 2 ships text mode. Phase 3 adds a voice mode (Deepgram or NVIDIA Riva) for
 ## Phased roadmap (high level)
 
 - **Phase 1 (MVP)** — Discovery (Adzuna + Greenhouse), profile chat onboarding, resume parse + match scoring, basic tailoring, email + push notifications, Google OAuth, NVIDIA guest pool.
-- **Phase 2** — More sources (Jooble, JSearch, Lever, Playwright scrapers, email forwards), browser extension for autofill, cover letters, Kanban tracker, **Interview Grill Chat Agent (text)**, JD red-flag detector, resume A/B analytics.
+- **Phase 2** — More sources (Jooble, JSearch, Lever, a JobSpy-wrapped adapter for the big boards, Playwright scrapers, email forwards), browser extension for autofill + one-click job capture from any page, cover letters, Kanban tracker, **Interview Grill Chat Agent (text)**, **Ghost-Job Shield** (repost fingerprinting + staleness + red-flag signals on every job card), match-score explainability (matched/missing keywords feeding tailoring), ATS-safe resume export (JSON schema → templates → round-trip parse test), resume A/B analytics.
 - **Phase 3** — Autonomous apply behind HITL gates, portal AuthFlows for Workday/Greenhouse/Lever (Faultline-style), LinkedIn integration, salary intelligence, networking-outreach agent, **voice mode** for Interview Grill, salary negotiation rehearsal.
 
 ## What we are not building
@@ -93,6 +110,9 @@ Phase 2 ships text mode. Phase 3 adds a voice mode (Deepgram or NVIDIA Riva) for
 - A recruiter-side product. The platform is candidate-owned. Recruiters who want to use the data should pay candidates directly.
 - A general-purpose AI assistant. The agent's tool registry is intentionally narrow and phase-gated.
 - A vector database. See principle 5.
+- A spray-and-pray mass applier. AIHawk's "500 applications overnight" demos created the category's spam reputation and got users banned; we will never weaken the HITL gate to chase that demo.
+- A covert live-interview copilot. Final Round AI's "undetectable" overlay was visible to interviewers over Zoom screen-share, and 18% of its reviewers call it a scam. The Grill agent is *preparation* — the one mode users consistently report actually working. We never assist deception inside a live interview.
+- A resume builder product. We need 2–3 ATS-safe export templates for the apply loop, not Reactive-Resume's template breadth — that's their product, not ours.
 
 ## How we'll know it's working
 

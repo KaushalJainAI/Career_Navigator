@@ -71,8 +71,8 @@ In local dev without Docker you can skip Celery entirely — `RUN_INGESTION_ASYN
 | `profiles` | StructuredProfile + Experience/Education/Skill/Project/Preference | [models](../backend/profiles/models.py) |
 | `resumes` | Upload + parse (PDF/DOCX) + versioning | [models](../backend/resumes/models.py) · [parsing](../backend/resumes/parsing.py) |
 | `jobs` | Company, Source, JobPosting | [models](../backend/jobs/models.py) · [views](../backend/jobs/views.py) |
-| `ingestion` | Source adapters + upsert pipeline + Celery tasks | [services](../backend/ingestion/services.py) · [adapters/](../backend/ingestion/adapters/) |
-| `matching` | Resume↔JD scoring (BM25 + skill overlap; LLM rerank optional) | [scorer](../backend/matching/scorer.py) |
+| `ingestion` | Source adapters (Adzuna, Greenhouse, Jooble, JSearch, Lever) + upsert pipeline + Celery tasks | [services](../backend/ingestion/services.py) · [adapters/](../backend/ingestion/adapters/) |
+| `matching` | Resume↔JD scoring (lexical + skill overlap today; BM25 the planned replacement — see drop-faiss doc) | [scorer](../backend/matching/scorer.py) |
 | `notifications` | Subscription DSL + Alert + WebPushDevice + Channels broadcast | [filters](../backend/notifications/filters.py) |
 | `applications` | Application + AutoApplySession + ApplicationEvent | [models](../backend/applications/models.py) · [views](../backend/applications/views.py) |
 | `tailoring` | TailoredResume + CoverLetter generators (LLM-injectable) | [generators](../backend/tailoring/generators.py) |
@@ -83,6 +83,8 @@ In local dev without Docker you can skip Celery entirely — `RUN_INGESTION_ASYN
 | `vault` | Faultline-style AuthFlow per portal (Phase 3) | [models](../backend/vault/models.py) |
 | `billing` | Stripe + credit ledger (Phase 1.5+) | [models](../backend/billing/models.py) |
 | `streaming` | Channels WebSocket consumers (notifications, interview) | [consumers](../backend/streaming/consumers.py) · [routing](../backend/streaming/routing.py) |
+| `networking` | Contact graph + warm-intro outreach drafting | [graph](../backend/networking/graph.py) · [services](../backend/networking/services.py) |
+| `ai` | Shared LLM provider transports (NVIDIA, CLI delegates, fallback) injected as `llm=` callables | [providers](../backend/ai/providers.py) |
 
 ## URL structure
 

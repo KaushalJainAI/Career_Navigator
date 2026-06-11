@@ -4,12 +4,12 @@ The phased roadmap that drove the initial scaffold. Read alongside [vision.md](.
 
 ## Context
 
-Job hunting is fragmented across discovery, tailoring, ATS forms, interview prep, and outcome tracking. Existing tools solve slices; none integrate them behind a single agent that keeps the candidate in control. We're building that platform — patterned on two reference projects on disk (AIAAS for the Django/LangGraph stack, Faultline for the parallel-tool agent loop and Vault-style auth flows) — with the candidate-control invariant enforced by a HITL hard-gate in the orchestrator. See [vision.md](./vision.md) for the full thesis.
+Job hunting is fragmented across discovery, tailoring, ATS forms, interview prep, and outcome tracking. Existing tools solve slices; none integrate them behind a single agent that keeps the candidate in control. We're building that platform — patterned on two reference projects on disk (AIAAS for the Django/LangGraph stack, Faultline for the parallel-tool agent loop and Vault-style auth flows) — with the candidate-control invariant enforced by a HITL hard-gate in the orchestrator. See [vision.md](./vision.md) for the full thesis, and [competitive-landscape.md](./competitive-landscape.md) for how each roadmap item positions us against AIHawk, JobSpy, Resume-Matcher, Reactive-Resume/OpenResume, ApplyPilot, the Teal/Huntr/Simplify/Careerflow SaaS set, and Final Round AI — including the user-reported shortcomings of each that we engineer against.
 
 ## Locked decisions
 
 - **Stack**: Django 5 + DRF + Celery + Redis + Postgres + React 19 + Vite + Zustand + Tailwind (mirrors AIAAS).
-- **Job sources**: aggregator APIs (Adzuna, Jooble, JSearch) + per-company Playwright scrapers + LinkedIn (best-effort) + user-forwarded email alerts + web-search tool + CLI-delegate fallback (Faultline pattern).
+- **Job sources**: aggregator APIs (Adzuna, Jooble, JSearch) + ATS APIs (Greenhouse, Lever) + a **JobSpy-wrapped adapter** for the scrape-hostile big boards (Indeed, LinkedIn, Glassdoor, ZipRecruiter, Google Jobs — compose with the MIT-licensed library rather than re-fighting the anti-bot arms race) + per-company Playwright scrapers for portals JobSpy doesn't cover + user-forwarded email alerts + extension one-click capture + web-search tool + CLI-delegate fallback (Faultline pattern).
 - **NVIDIA NIM** shared guest key for unauthenticated/free users (AIAAS pattern); Pro brings own key or uses credits.
 - **Auto-apply tier** is per-job user choice: `assist` → `autofill` (extension) → `autonomous` (server Playwright + HITL gate).
 - **No embedder.** Lexical scoring + JSONL+ripgrep RAG. See [drop-faiss-and-add-google-auth.md](./drop-faiss-and-add-google-auth.md).
@@ -32,14 +32,19 @@ Job hunting is fragmented across discovery, tailoring, ATS forms, interview prep
 
 ### Phase 2 — Discovery & tracking
 
-- Adapters: Jooble, JSearch (RapidAPI), Lever, Playwright scraper framework, email-forward parser.
+Ordering within Phase 2 follows the gap analysis in [competitive-landscape.md](./competitive-landscape.md) §4–5: compose where the capability is commoditized (board scraping), build where we're differentiated (Ghost-Job Shield, Grill agent, outcome analytics).
+
+- Adapters: Jooble, JSearch (RapidAPI), Lever ✅; **JobSpy wrapper adapter** (largest coverage gain for the least code — feeds `upsert_postings` like any other adapter; per-source rate budgets + proxy config on the `Source` model, `hours_old`-style freshness params); Playwright scraper framework for what JobSpy doesn't cover; email-forward parser.
+- **Ghost-Job Shield** (promoted to flagship — see landscape §6.5): content-hash repost fingerprinting across ingestion runs, `first_seen`/`last_seen` staleness tracking (>45–60 days unchanged), missing-salary + evergreen-req heuristics; ghost-risk score on every job card; auto-apply queues deprioritize high-risk postings. Subsumes and extends the JD red-flag detector (toxic language, unrealistic reqs).
+- **Match-score explainability**: the scorer already returns a `gaps` (missing-skill) list and a `breakdown`; extend to structured `{matched_skills, missing_skills, jd_keywords_absent}`, render it on job detail (Resume-Matcher's lesson: the guidance is the product, the number is secondary), and wire the missing-keyword output as the direct input to tailoring prompts.
+- **Truthfulness verification pass** in `tailoring/` (landscape §6.1): deterministic post-generation checks — identity fields exactly match profile, claimed skills exist in profile, no AI edit applied without the user seeing the diff. Fails closed; no LLM required; ships with tests.
+- **ATS-safe resume export**: canonical JSON resume schema for tailored output (diff the JSON, not the PDF) → 2–3 single-column server-rendered templates → round-trip test that our own `resumes/` parser can read our exports (OpenResume's trick).
 - Subscription model with filter DSL (role, location, remote, salary, seniority, keywords, exclude-companies).
-- Browser extension (autofill tier): MV3, talks to `extension_api`.
-- Cover-letter generator.
-- Applications Kanban (Saved → Tailored → Applied → Phone → Onsite → Offer/Reject).
-- **Interview Grill Chat Agent (text)** — research → tailored question bank → live grilling loop with per-answer evaluation + drilldown → post-session report + study plan.
-- JD red-flag detector (toxic language, unrealistic reqs, ghost-job signals).
-- Response-rate analytics per resume variant.
+- Browser extension: MV3 autofill tier ✅, plus **one-click job capture** from any careers page into `JobPosting` via `/api/v1/ext/` (Teal/Huntr's most-loved feature; feeds the hidden job market our adapters never see); **`PortalRecipe` data-driven field maps** served from the server so new-portal support is a data update, not an extension release (start with Greenhouse/Lever where URL→portal detection is trivial); per-field confidence marking on autofill (landscape §6.6); profile-schema audit against AIHawk's `plain_text_resume.yaml` for long-tail ATS fields (work authorization per country, notice period, relocation); agent-answered free-text form questions behind `HITL_CONFIRM`.
+- Cover-letter generator ✅ (now subject to the truthfulness verification pass).
+- Applications Kanban (Saved → Tailored → Applied → Phone → Onsite → Offer/Reject) ✅.
+- **Interview Grill Chat Agent (text)** — research → tailored question bank → live grilling loop with per-answer evaluation + drilldown → **persisted rubric-scored post-session report** (per-competency scores, weakest answers verbatim, 5-item study plan) that seeds the next session's difficulty ramp. Web-search tool feeds company-specific question banks (the Final Round AI capability, minus the live-copilot direction we explicitly reject).
+- Response-rate analytics per resume variant — **the primary dashboard view, not a buried report** (landscape §6.4): response rate per variant, time-to-first-interview, stage conversion. Never "applications sent" as the headline metric.
 
 ### Phase 3 — Autonomous apply & intelligence
 
@@ -50,14 +55,16 @@ Job hunting is fragmented across discovery, tailoring, ATS forms, interview prep
 - Salary intelligence (Levels.fyi/Glassdoor scrape + LLM normalisation).
 - Networking outreach agent (CSV/LinkedIn contacts import, draft warm intros).
 - Weekly career-coach digest.
-- **Voice mode** for Interview Grill Chat Agent (Deepgram or NVIDIA Riva).
+- **Voice mode** for Interview Grill Chat Agent (Deepgram or NVIDIA Riva) — transcription-first (user speaks, agent reads) as the cheap 80% before speech-to-speech. Preparation only; no live-interview copilot, ever (see vision "What we are not building").
 - Salary negotiation rehearsal.
+- **Stripe billing with trust requirements** (landscape §6.3, non-negotiable at launch): one-click self-serve cancel, credits roll over while subscribed, one-sentence refund policy honoured programmatically, no rebilling after cancellation. These ship in the same commit as checkout — billing hostility is the #1 one-star theme across every paid competitor.
+- **BYOK / local-model option** surfaced as a user-facing setting via the credentials vault (the `llm=` injection already supports it) — privacy differentiation for stealth-mode users, following Resume-Matcher's local-first pivot.
 
 ## Backend apps — details
 
 See [data-model.md](./data-model.md) for per-app entity details; [architecture.md](./architecture.md) for app responsibilities. Apps shipped in Phase 1:
 
-`accounts` · `profiles` · `resumes` · `jobs` · `ingestion` · `matching` · `notifications` · `applications` · `tailoring` · `agent` · `interview` · `credentials` · `extension_api` · `vault` · `billing` · `streaming`.
+`accounts` · `profiles` · `resumes` · `jobs` · `ingestion` · `matching` · `notifications` · `applications` · `networking` · `tailoring` · `agent` · `interview` · `credentials` · `extension_api` · `vault` · `billing` · `streaming` · `ai`.
 
 ## Agent / tool design
 
@@ -124,7 +131,7 @@ python manage.py shell -c "from ingestion.tasks import run_source; print(run_sou
 
 ## Phase status (current)
 
-- Phase 1: **implemented beyond scaffold**. All 16 apps are wired; Google OAuth, API tokens, deterministic onboarding profile updates, profile readiness, resume upload/parse, skill extraction, matching, real dashboard stats, applications Kanban with job details, tailoring, cover letters, notification subscriptions, credits ledger, and Interview Grill text mode are present.
+- Phase 1: **implemented beyond scaffold**. All 18 apps are wired; Google OAuth, API tokens, deterministic onboarding profile updates, profile readiness, resume upload/parse, skill extraction, matching, real dashboard stats, applications Kanban with job details, tailoring, cover letters, notification subscriptions, credits ledger, and Interview Grill text mode are present.
 - Phase 2: **partially implemented**. Apply workflow now has distinct `assist`, `autofill`, and `autonomous` preparation paths, application audit events, HITL approval-token issuance for autonomous mode, frontend review panels for next actions plus generated resume/cover-letter materials, and manual network contact seeding. Extension APIs/parsers exist, but full extension install/autofill/submit validation remains pending.
 - Phase 3: **pending**. Server-side Playwright autonomous submission, portal AuthFlows, LinkedIn session integration, salary intelligence, Stripe checkout/webhooks, advanced analytics, and voice interview mode are not complete.
 

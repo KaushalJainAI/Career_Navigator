@@ -13,6 +13,16 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 ## Recently Completed
 
 - Created this project progress tracker.
+- Adapter quality + verification pass (2026-06-11):
+  - Refactored the ingestion adapter layer: `make_posting()` factory enforces the posting contract, shared `get_json`/`post_json` helpers contain per-page/board failures (logged without URLs so the Jooble key can't leak), `http_client()` gives uniform timeout + connect retries, and all five adapters accept an injectable `transport` for `httpx.MockTransport` tests.
+  - Added an integration test covering the full fetch → normalise → upsert → `IngestionRun`/`JobPosting` chain, including idempotent reruns and invalid-row skipping.
+  - Live end-to-end smoke via `backend/scripts/smoke_adapters.py`: Greenhouse (stripe board) returned 496 postings and Lever (mistral board) 173 postings, all contract-valid. Empty boards (companies that left the ATS) degrade gracefully to zero rows. Jooble/JSearch live smoke still needs real API keys.
+  - CI green on the refactor commit; backend suite at 144 tests.
+- Competitive-positioning docs pass (2026-06-10):
+  - Added [competitive-landscape.md](competitive-landscape.md): project-by-project comparison against AIHawk, JobSpy, Resume-Matcher, Reactive-Resume/OpenResume, ApplyPilot, Teal/Huntr/Simplify/Careerflow, and Final Round AI, plus a researched section on user-reported shortcomings (Reddit/Trustpilot/GitHub issues) and our guardrails against each.
+  - Updated vision.md: ghost jobs added as a core friction; truthfulness now deterministically verified post-generation; new design principles 9–11 (agent never speaks as the candidate without review; outcomes over volume; billing trust); expanded "What we are not building" (no spray-and-pray applier, no covert live-interview copilot, no resume-builder product).
+  - Updated implementation-plan.md: JobSpy wrapper adapter as a locked source decision; Phase 2 re-scoped around the Ghost-Job Shield (flagship), match explainability, truthfulness verification pass, ATS-safe export, extension job capture + PortalRecipe field maps, grill post-session reports, outcome-first analytics; Phase 3 billing-trust requirements and BYOK option.
+  - Updated README: new Features table and a Documentation link to the landscape doc.
 - Implemented the browser-extension autofill bridge:
   - receives autofill suggestions from the backend,
   - fills matching empty form fields only,
@@ -148,8 +158,9 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 
 ### Phase 2 Discovery Sources
 
-- Adzuna, Greenhouse, Jooble, JSearch, and Lever backend adapters are implemented (2026-06-10) and registered in `ingestion/tasks.py::ADAPTER_REGISTRY`, with `httpx.MockTransport` test coverage (138 backend tests passing).
-- Jooble/JSearch/Lever need API keys (`JOOBLE_API_KEY`, `JSEARCH_RAPIDAPI_KEY`) or company tokens (`LEVER_TOKENS`) configured before they ingest live data — a real-key smoke run is still pending.
+- Adzuna, Greenhouse, Jooble, JSearch, and Lever backend adapters are implemented and registered in `ingestion/tasks.py::ADAPTER_REGISTRY`, with `httpx.MockTransport` unit tests, a fetch→DB integration test, and a shared resilient base layer (144 backend tests passing as of 2026-06-11).
+- Greenhouse and Lever were smoke-tested live against real public boards on 2026-06-11 (stripe: 496 postings, mistral: 173, all contract-valid) via `backend/scripts/smoke_adapters.py`.
+- Jooble/JSearch need API keys (`JOOBLE_API_KEY`, `JSEARCH_RAPIDAPI_KEY`) before a live smoke run; production ingestion also needs `LEVER_TOKENS`/`GREENHOUSE_TOKENS` set to the boards we want to track.
 - Playwright scraper framework, email-forward parsing, and web-search/CLI-delegate fallback are planned but not implemented.
 
 ### Autofill and Extension Workflow

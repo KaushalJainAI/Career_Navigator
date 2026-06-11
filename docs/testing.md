@@ -87,7 +87,14 @@ def test_exchange_code_posts_form_to_token_url(settings):
     assert 'code=the-code' in captured['body']
 ```
 
-Same pattern for adapters: pass a mock client into `AdzunaAdapter(http=...)` once that becomes injectable (Phase 2 cleanup). For now, the `_normalise` static is the unit-tested part; the live `fetch` is integration-tested separately.
+Same pattern for adapters — every ingestion adapter takes `transport=`:
+
+```python
+adapter = LeverAdapter(tokens=['acme'], transport=httpx.MockTransport(handler))
+postings = adapter.run()
+```
+
+`backend/ingestion/tests/test_adapters.py` unit-tests each `_normalise` with a real-shaped fixture row plus `fetch` paging/error paths via `MockTransport`; `test_services.py` covers the fetch→normalise→upsert→DB chain end to end. Live endpoints are verified by hand with `backend/scripts/smoke_adapters.py` (keyless Greenhouse/Lever boards), never from the suite.
 
 ### Mocking the LLM
 

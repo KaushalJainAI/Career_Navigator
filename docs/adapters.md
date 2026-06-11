@@ -27,7 +27,13 @@ Every adapter subclasses `BaseAdapter` and implements `fetch(ctx: AdapterContext
 }
 ```
 
-Rows missing `external_id` or `title` are silently skipped by `upsert_postings` — that's how `_normalise` failures degrade gracefully.
+Adapters never hand-build this dict — they call `make_posting(**fields)` from `base.py`, which fills defaults and coerces odd values (string salaries, unstripped ids/titles, missing company names → `'Unknown'`). Rows that still come out missing `external_id` or `title` are silently skipped by `upsert_postings` — that's how `_normalise` failures degrade gracefully.
+
+`base.py` also provides the shared plumbing every adapter uses:
+
+- `self.http_client(**kwargs)` — an `httpx.Client` with the standard timeout; uses connect retries on live runs, or the `transport` injected via the constructor (tests pass `httpx.MockTransport`).
+- `self.get_json(client, url, ...)` / `self.post_json(client, url, ...)` — issue a request and return parsed JSON, or `None` on HTTP/transport/parse failure. Failures are logged **without the URL** (Jooble embeds its API key in the URL) and never raise, so one bad page or board cannot abort a multi-source run.
+- `parse_iso_dt`, `parse_epoch_ms`, `to_int`, `looks_remote` — shared field parsers. Don't re-implement these per adapter.
 
 ## Existing adapters
 
@@ -35,10 +41,12 @@ Rows missing `external_id` or `title` are silently skipped by `upsert_postings` 
 |---|---|---|---|
 | `AdzunaAdapter` | aggregator API | [ingestion/adapters/adzuna.py](../backend/ingestion/adapters/adzuna.py) | `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` |
 | `GreenhouseAdapter` | public ATS boards | [ingestion/adapters/greenhouse.py](../backend/ingestion/adapters/greenhouse.py) | none — iterates over `GREENHOUSE_TOKENS` |
+| `JoobleAdapter` | aggregator API | [ingestion/adapters/jooble.py](../backend/ingestion/adapters/jooble.py) | `JOOBLE_API_KEY` |
+| `JSearchAdapter` | aggregator API (RapidAPI) | [ingestion/adapters/jsearch.py](../backend/ingestion/adapters/jsearch.py) | `JSEARCH_RAPIDAPI_KEY` |
+| `LeverAdapter` | public ATS boards | [ingestion/adapters/lever.py](../backend/ingestion/adapters/lever.py) | none — same shape as Greenhouse, different endpoint |
 
-Phase 2 adds:
-- `JoobleAdapter`, `JSearchAdapter` (RapidAPI)
-- `LeverAdapter` (public boards — same shape as Greenhouse, different endpoint)
+Phase 2 still to add:
+- `JobSpyAdapter` (wraps the MIT-licensed JobSpy library for the scrape-hostile big boards — Indeed/LinkedIn/Glassdoor/ZipRecruiter/Google Jobs; see [competitive-landscape.md](competitive-landscape.md) §2.2)
 - `PlaywrightScraperAdapter` (per-company custom scrapers; runs on the playwright Celery queue)
 - `EmailForwardAdapter` (parses LinkedIn/Indeed digest emails forwarded to `apply@<domain>`)
 - `WebSearchAdapter` (LLM-driven; returns candidate URLs that then go through the scraper)
@@ -46,12 +54,12 @@ Phase 2 adds:
 
 ## Writing a new adapter
 
-1. Create `backend/ingestion/adapters/<name>.py`. Subclass `BaseAdapter`. Set class attributes `source_name`, `source_kind`.
-2. Implement `fetch(self, ctx)`. Use `httpx.Client` synchronously — keep IO simple, the orchestrator parallelises across postings, not within a single source.
-3. Write a static `_normalise(row, …)` helper that maps the raw payload to the contract dict. Put parsing edge-cases here so the I/O code stays minimal.
+1. Create `backend/ingestion/adapters/<name>.py`. Subclass `BaseAdapter`. Set class attributes `source_name`, `source_kind`. The constructor takes source config (key/tokens, defaulting from settings) plus `transport: httpx.BaseTransport | None = None`, passed to `super().__init__(transport)`.
+2. Implement `fetch(self, ctx)` using `with self.http_client() as client:` and `self.get_json(...)`/`self.post_json(...)` — never raw `client.get` with manual status checks. Keep IO simple and synchronous; the orchestrator parallelises across postings, not within a single source. If the source needs a key that isn't configured, `logger.info(...)` and return early.
+3. Write a static `_normalise(row, …)` helper that maps the raw payload to `make_posting(...)` keyword fields. Use the shared parsers (`parse_iso_dt`, `parse_epoch_ms`, `looks_remote`) — put source-specific edge-cases here so the I/O code stays minimal.
 4. Register in `ADAPTER_REGISTRY` in [ingestion/tasks.py](../backend/ingestion/tasks.py). Choose the registry key carefully — it's what the Celery task accepts as `source_name`.
 5. Add a `Source` row via `manage.py shell` or a fixture so beat can run it: `Source.objects.create(name='<name>', kind='<kind>')`.
-6. Add unit tests in `backend/ingestion/tests/test_adapter_<name>.py`. **The normaliser must have a test with a real-shaped fixture row.** For HTTP, use `httpx.MockTransport`. We do not hit the network in tests, ever.
+6. Add unit tests in `backend/ingestion/tests/test_adapters.py`. **The normaliser must have a test with a real-shaped fixture row**, and `fetch` must have a test using `httpx.MockTransport` via the `transport` constructor arg. We do not hit the network in tests, ever — live verification uses `backend/scripts/smoke_adapters.py` run by hand.
 
 ## Idempotency
 

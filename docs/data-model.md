@@ -107,6 +107,21 @@ The Kanban core.
 
 The orchestrator-level HITL check + the in-tool re-check both compare against `AutoApplySession.approval_token` — see [agent.md](./agent.md).
 
+### networking ([models](../backend/networking/models.py))
+
+Referral graph + warm-intro outreach. Outreach is draft-only and gated by the same approval-token pattern as auto-apply (see vision principle 9).
+
+| Model | Key fields | Notes |
+|---|---|---|
+| `Contact` | `user`, `company`, `name`, `title`, `source`, `relationship_strength`, `tags` | Indexed on `(user, name)` and `(user, email)`. `source` enum: manual/csv/google/profile_url/public_page. |
+| `ContactEmployment` | `contact`, `company`, `started_at`, `ended_at`, `is_current` | A contact's employment over time; `overlaps()` powers colleague inference. Unique on `(contact, company, title, started_at)`. |
+| `ContactRelationship` | `from_contact`, `to_contact`, `kind`, `strength`, `inferred` | Directed edge; bidirectional kinds stored as two rows. |
+| `CompanyRelationship` | `from_company`, `to_company`, `kind` | Global (not per-user) company graph: acquired/parent/subsidiary/competitor/etc. |
+| `ReferralOpportunity` | `user`, `job`, `contact`, `score`, `status` | Unique on `(user, job, contact)`; ranked by score. |
+| `OutreachMessage` | `user`, `contact`, `job`, `channel`, `draft_body`, `approved_body`, `payload_hash`, `status` | `approve()` hashes the approved body — drafts are never auto-sent. |
+| `ActionQueueItem` | `user`, `action_type`, `priority`, `due_at`, `status` | Surfaced as the user's next-actions queue. |
+| `UserConsentEvent` | `user`, `action_type`, `payload_hash`, `approval_token`, `expires_at`, `used_at` | Mirrors the `AutoApplySession` token pattern for outreach/credentials consent; `is_valid` checks unused + unexpired. |
+
 ### tailoring ([models](../backend/tailoring/models.py))
 
 `TailoredResume (1:1 Application)` stores the generated content + `diff_from_master (JSONField)` so the candidate can audit what changed.

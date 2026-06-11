@@ -160,7 +160,7 @@ See [frontend/.env.example](../frontend/.env.example):
 
 ### Add a Django app
 
-The 15 apps in this repo were not made via `startapp` — they're hand-laid because we wanted custom layouts (`tests/` subdir, etc.). Mimic an existing thin app like [billing](../backend/billing/) or [vault](../backend/vault/):
+The 18 apps in this repo were not made via `startapp` — they're hand-laid because we wanted custom layouts (`tests/` subdir, etc.). Mimic an existing thin app like [billing](../backend/billing/) or [vault](../backend/vault/):
 
 ```
 backend/<app>/
