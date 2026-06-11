@@ -1,6 +1,6 @@
 # Competitive Landscape: Career Navigator vs. Famous Career-Ops Projects
 
-Last updated: 2026-06-10
+Last updated: 2026-06-11
 
 This document compares Career Navigator against the most well-known open-source and commercial career/job-search projects, identifies what we already do better, and catalogues concrete inspirations and improvements we should borrow from each.
 
@@ -15,7 +15,7 @@ Career Navigator spans **four product categories** that the famous projects each
 | Category | Leading project(s) | Approx. traction (mid-2026) | Our equivalent |
 |---|---|---|---|
 | Auto-apply AI agent | [AIHawk](https://github.com/feder-cr/jobs_applier_ai_agent_aihawk), [ApplyPilot](https://github.com/Pickle-Pixel/ApplyPilot) | AIHawk ~29k★, major press (TechCrunch, Wired, The Verge) | `agent/` + `applications/` tiered assist → autofill → autonomous |
-| Job-board aggregation | [JobSpy](https://github.com/cullenwatson/JobSpy) | De-facto standard scraping library; embedded in many agents | `ingestion/` adapters: Adzuna, Greenhouse, Jooble, JSearch, Lever |
+| Job-board aggregation | [JobSpy](https://github.com/cullenwatson/JobSpy) | De-facto standard scraping library; embedded in many agents | `ingestion/` adapters: Adzuna, Greenhouse, Jooble, JSearch, Lever — hardened contract + live-verified (Greenhouse 496 / Lever 173 postings on a real smoke run) |
 | Resume ↔ JD matching | [Resume-Matcher](https://github.com/srbhr/Resume-Matcher) | ~16.5k★ | `matching/` lexical + skill-overlap (BM25 migration planned) |
 | Resume building/parsing | [Reactive-Resume](https://github.com/AmruthPillai/Reactive-Resume), [OpenResume](https://github.com/xitanggg/open-resume) | ~16.8k★ / ~8.7k★ | `resumes/` parsing + `tailoring/` generation |
 | Tracking + autofill SaaS | Teal, Huntr, Simplify, Careerflow | Category-defining commercial tools | Applications Kanban + MV3 extension autofill bridge |
@@ -50,11 +50,11 @@ Career Navigator spans **four product categories** that the famous projects each
 
 **What it is:** Python scraping library that queries Indeed, LinkedIn, Glassdoor, ZipRecruiter, Google Jobs and Bayt concurrently and returns a normalized DataFrame. The aggregation backbone of many auto-apply projects.
 
-**How we compare:** our `ingestion/adapters/` covers API-friendly sources (Adzuna, Jooble, JSearch aggregators; Greenhouse, Lever ATS APIs). JobSpy covers the scrape-hostile boards where the actual volume lives. Notably, **JSearch already proxies Google for Jobs results**, which partially covers LinkedIn/Indeed postings indirectly.
+**How we compare:** our `ingestion/adapters/` covers API-friendly sources (Adzuna, Jooble, JSearch aggregators; Greenhouse, Lever ATS APIs). As of 2026-06-11 this layer is no longer just scaffolded — a `make_posting()` factory enforces the posting contract, shared `get_json`/`post_json` helpers contain per-page/board failures (logged without URLs so the Jooble key can't leak), every adapter takes an injectable `transport` for `httpx.MockTransport` tests, and a live smoke run returned 496 Greenhouse (stripe) and 173 Lever (mistral) contract-valid postings with empty boards degrading gracefully to zero. So our *adapter infrastructure* is production-grade; what JobSpy still has over us is **coverage of the scrape-hostile boards where the volume lives** (Indeed/LinkedIn/Glassdoor/ZipRecruiter). Notably, **JSearch already proxies Google for Jobs results**, which partially covers LinkedIn/Indeed postings indirectly.
 
 **Inspirations to take:**
-- **Wrap JobSpy as an adapter** rather than re-implementing board scraping. It is MIT-licensed, returns a normalized record very close to our `adapters/base.py` shape, and outsources the anti-bot arms race to a maintained community project. A `jobspy.py` adapter feeding `upsert_postings` is the cheapest way to close our biggest coverage gap (candidate for Phase 2, possibly replacing or augmenting the planned Playwright scraper for boards JobSpy already handles).
-- **Proxy rotation and per-site rate budgets.** JobSpy treats proxies and per-site request budgets as first-class config. When our Playwright scraper lands, copy this posture: per-source `rate_limit` + `proxy_pool` columns on the `Source` model, not hard-coded sleeps.
+- **Wrap JobSpy as an adapter** rather than re-implementing board scraping. It is MIT-licensed, returns a normalized record very close to our (now hardened) `adapters/base.py` shape, and outsources the anti-bot arms race to a maintained community project. Because our adapter contract is now enforced by `make_posting()` and exercised by the fetch → normalise → upsert integration test, a `JobSpyAdapter` is just one more `_normalise()` mapping feeding `upsert_postings` — the cheapest way to close our biggest coverage gap (Phase 2; can replace or augment the Playwright scraper for boards JobSpy already handles).
+- **Proxy rotation and per-site rate budgets.** JobSpy treats proxies and per-site request budgets as first-class config. We already have uniform `http_client()` timeout + connect retries; extend that posture with per-source `rate_limit` + `proxy_pool` columns on the `Source` model (not hard-coded sleeps) when the JobSpy/Playwright sources land.
 - **`hours_old` freshness filter.** JobSpy filters postings by age at fetch time. Our real-time-alerts value prop depends on freshness; add posting-age filtering to adapter params and surface "posted X hours ago" prominently in the jobs UI.
 
 ### 2.3 Resume-Matcher (`srbhr/Resume-Matcher`)
@@ -93,11 +93,11 @@ Career Navigator spans **four product categories** that the famous projects each
 
 **What they are:** the commercial tracking/autofill ecosystem. Huntr: kanban tracker + basic autofill extension (free to 40 jobs, then paid). Teal: table-based tracker + JD-paired resume builder + Chrome extension job capture (~$29/mo premium). Simplify: autofill extension covering **100+ ATS portals** (Workday, Greenhouse, iCIMS, Lever). Careerflow: ecosystem play — LinkedIn import/optimization, tracker, resume tools (~$14/mo).
 
-**How we compare:** our Applications Kanban matches Huntr's core; our extension bridge is early relative to Simplify's portal coverage; none of them auto-submit (they all stop at autofill), and none have an agent, interview prep, or outcome learning. Their moats are **portal breadth** (Simplify) and **frictionless capture** (Teal/Huntr's "save this job from any page" button).
+**How we compare:** our Applications Kanban matches Huntr's core; our MV3 extension already ships per-portal parsers for LinkedIn (jobs + profile), Greenhouse, Lever, Mercor, Naukri, and Unstop, plus an autofill bridge that fills high-confidence empty fields without overwriting user input and records filled values on submit — so we're past "early," though still far short of Simplify's 100+ portals. None of the commercial tools auto-submit (they all stop at autofill), and none have an agent, interview prep, or outcome learning. Their moats are **portal breadth** (Simplify) and **frictionless capture** (Teal/Huntr's "save this job from any page" button) — the latter we don't have yet.
 
 **Inspirations to take:**
 - **One-click job capture from any page** (Teal/Huntr's most-loved feature). Our extension should let the user save the posting they're looking at into `JobPosting` via `/api/v1/ext/` — this turns the extension from an autofill tool into a top-of-funnel capture tool and feeds postings our adapters will never see (the hidden job market in our vision doc).
-- **Per-portal autofill recipes as data, not code.** Simplify's coverage of 100+ portals is a long tail of field-mapping recipes. Structure ours the same way: a `PortalRecipe` model (selectors/field-map JSON per ATS domain) served to the extension, so new portal support is a data update, not an extension release. Start with the ATS families we already ingest (Greenhouse, Lever) where URL→portal detection is trivial.
+- **Per-portal autofill recipes as data, not code.** Simplify's coverage of 100+ portals is a long tail of field-mapping recipes. We already have hand-written parsers for 6 portals shipped *in the extension bundle* — the next step is to lift those mappings into a server-served `PortalRecipe` model (selectors/field-map JSON per ATS domain) so portal #7 onward is a data update, not an extension release. We already ingest Greenhouse/Lever, so URL→portal detection for those is trivial and they're the obvious first migration.
 - **Pipeline analytics as retention.** Teal's tracker wins on per-stage metadata (excitement, follow-up dates, contacts). Our `ApplicationEvent` rows already capture the timeline — surface stage-conversion and response-rate views on the dashboard (planned Phase 2 analytics; this comparison is the argument for prioritizing it).
 - **Pricing-tier shape.** Free-to-N-applications then paid (Huntr) maps cleanly onto our existing tier/guest-key model in `billing/`.
 
@@ -119,7 +119,7 @@ Career Navigator spans **four product categories** that the famous projects each
 1. **HITL hard-gate on submission.** No open-source agent has per-application approval tokens enforced at the tool layer with test coverage. This is the answer to the category's spam-reputation problem. Architecture invariant — never weaken it.
 2. **Tiered autonomy (assist → autofill → autonomous).** The deliberate middle ground between Simplify (never submits) and AIHawk (always submits). No one else occupies it.
 3. **Stealth mode.** Query-time `stealth_domains` filtering for employed seekers is first-class here and absent everywhere else.
-4. **Platform completeness.** Auth + tiers + billing + encrypted credentials vault + Celery ingestion + Channels streaming + CI. Every OSS competitor is a script or single-purpose app.
+4. **Platform completeness.** Auth + tiers + billing + encrypted credentials vault + Celery ingestion (live-verified against real Greenhouse/Lever boards, 149 backend tests, green CI) + Channels streaming. Every OSS competitor is a script or single-purpose app.
 5. **The closed feedback loop (vision).** "Which resume variant lands interviews" attribution is shipped by nobody — Teal tracks outcomes but doesn't attribute them. Our `ApplicationEvent` + tailored-resume-variant linkage is the foundation; the Phase 2 response-rate analytics is where this becomes visible.
 6. **Truthfulness as a data-model constraint.** Tailoring with audit-trail diffs that cannot misrepresent the candidate — a stated invariant no competitor documents.
 
@@ -127,8 +127,8 @@ Career Navigator spans **four product categories** that the famous projects each
 
 | Gap | Who's ahead | Cheapest path to parity |
 |---|---|---|
-| Big-board coverage (Indeed/LinkedIn/Glassdoor) | JobSpy | Wrap JobSpy as an ingestion adapter |
-| ATS portal autofill breadth | Simplify (100+ portals) | `PortalRecipe` data-driven field maps; start with Greenhouse/Lever |
+| Big-board coverage (Indeed/LinkedIn/Glassdoor) | JobSpy | Wrap JobSpy as an ingestion adapter — adapter infra is now hardened + live-verified, so this is a one-mapping add |
+| ATS portal autofill breadth | Simplify (100+ portals) | 6 portal parsers already ship in the extension; lift them into server-served `PortalRecipe` field maps, then grow the long tail |
 | Polished ATS-safe resume export | Reactive-Resume, OpenResume | JSON schema + 2–3 server-rendered templates; round-trip parse test |
 | Match-score explainability UX | Resume-Matcher | Return structured matched/missing keywords; render on job detail |
 | Job capture from any page | Teal, Huntr | "Save job" action in the extension via `/api/v1/ext/` |
@@ -140,8 +140,8 @@ Career Navigator spans **four product categories** that the famous projects each
 
 Weight effort toward what is **unique** (grill agent depth, HITL story, outcome analytics) over what is **commoditized** (board scraping, where we should compose rather than compete).
 
-1. **Ship what exists** — commit/push local work so CI runs ([project-progress.md](project-progress.md) flags this as the top action).
-2. **JobSpy adapter** — largest coverage gain for the least code; de-risks/defers the bespoke Playwright scraper.
+1. **Ship what exists** — commit/push local work so CI runs ([project-progress.md](project-progress.md) flags this as the top action; the adapter-hardening pass is green at 149 backend tests but still unpushed).
+2. **JobSpy adapter** — largest coverage gain for the least code; now even cheaper since the adapter contract is hardened and live-verified, so it's a single `_normalise()` mapping. De-risks/defers the bespoke Playwright scraper.
 3. **Match explainability** — structured missing-keyword output; feeds tailoring and the UI simultaneously.
 4. **Resume export pipeline** — JSON schema → ATS-safe template → PDF, with round-trip parser test.
 5. **Extension job capture** — one-click save-from-any-page; highest-leverage extension feature after autofill.
