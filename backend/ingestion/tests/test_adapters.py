@@ -3,7 +3,9 @@ import json
 import httpx
 
 from ingestion.adapters.adzuna import AdzunaAdapter
-from ingestion.adapters.base import AdapterContext
+from ingestion.adapters.base import (
+    AdapterContext, looks_remote, make_posting, parse_epoch_ms, parse_iso_dt, to_int,
+)
 from ingestion.adapters.greenhouse import GreenhouseAdapter
 from ingestion.adapters.jooble import JoobleAdapter
 from ingestion.adapters.jsearch import JSearchAdapter
@@ -162,3 +164,55 @@ def test_lever_fetch_iterates_tokens_and_skips_failures():
     out = adapter.run()
     assert [p['external_id'] for p in out] == ['p1']
     assert out[0]['company']['name'] == 'Goodco'
+
+
+def test_lever_fetch_survives_network_error():
+    def handler(request):
+        if 'downco' in str(request.url):
+            raise httpx.ConnectError('boom', request=request)
+        return httpx.Response(200, json=[{'id': 'p2', 'text': 'SRE'}])
+
+    adapter = LeverAdapter(tokens=['downco', 'upco'], transport=httpx.MockTransport(handler))
+    out = adapter.run()
+    assert [p['external_id'] for p in out] == ['p2']
+
+
+def test_adzuna_fetch_stops_quietly_on_http_error():
+    def handler(request):
+        return httpx.Response(429)
+
+    adapter = AdzunaAdapter(app_id='i', app_key='k', transport=httpx.MockTransport(handler))
+    assert adapter.run() == []
+
+
+def test_greenhouse_fetch_with_injected_transport():
+    def handler(request):
+        return httpx.Response(200, json={'jobs': [{'id': 7, 'title': 'PM'}]})
+
+    adapter = GreenhouseAdapter(tokens=['acme'], transport=httpx.MockTransport(handler))
+    out = adapter.run()
+    assert [p['external_id'] for p in out] == ['7']
+
+
+def test_make_posting_coerces_blank_and_odd_values():
+    out = make_posting(external_id=42, title='  Engineer  ', salary_min='90000.0',
+                       salary_max=None, company_name='  ')
+    assert out['external_id'] == '42'
+    assert out['title'] == 'Engineer'
+    assert out['salary_min'] == 90000
+    assert out['salary_max'] is None
+    assert out['company'] == {'name': 'Unknown', 'domain': '', 'ats_type': 'other'}
+    assert out['raw'] == {}
+
+
+def test_parse_helpers_tolerate_garbage():
+    assert parse_iso_dt('not-a-date') is None
+    assert parse_iso_dt(None) is None
+    assert parse_iso_dt('2026-06-01T08:00:00Z') is not None
+    assert parse_epoch_ms('garbage') is None
+    assert parse_epoch_ms(1764547200000).year == 2025
+    assert to_int('abc') is None
+    assert to_int('') is None
+    assert to_int(99.9) == 99
+    assert looks_remote('Senior Dev', None, 'REMOTE — EU') is True
+    assert looks_remote('Onsite NYC') is False
