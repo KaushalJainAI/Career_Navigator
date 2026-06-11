@@ -8,7 +8,7 @@ from ingestion.adapters.base import (
 )
 from ingestion.adapters.greenhouse import GreenhouseAdapter
 from ingestion.adapters.jooble import JoobleAdapter
-from ingestion.adapters.jsearch import JSearchAdapter
+from ingestion.adapters.jsearch import JSearchAdapter, _domain
 from ingestion.adapters.lever import LeverAdapter
 
 
@@ -131,6 +131,36 @@ def test_jsearch_fetch_sends_rapidapi_headers():
     assert [p['external_id'] for p in out] == ['j1']
 
 
+def test_jsearch_without_key_yields_nothing():
+    assert JSearchAdapter(api_key='').run() == []
+
+
+def test_jsearch_fetch_paginates_and_stops_on_empty():
+    pages = {1: {'data': [{'job_id': 'a', 'job_title': 'A'}]}, 2: {'data': []}}
+    seen_pages = []
+
+    def handler(request):
+        page = int(dict(request.url.params)['page'])
+        seen_pages.append(page)
+        return httpx.Response(200, json=pages[page])
+
+    adapter = JSearchAdapter(api_key='k', transport=httpx.MockTransport(handler))
+    out = adapter.run(AdapterContext(query='go', max_pages=5))
+    assert [p['external_id'] for p in out] == ['a']
+    assert seen_pages == [1, 2]
+
+
+def test_jsearch_domain_handles_bare_scheme_and_missing():
+    assert _domain('https://globex.com/careers') == 'globex.com'
+    assert _domain('globex.com') == 'globex.com'
+    assert _domain('') == ''
+    assert _domain(None) == ''
+
+
+def test_adzuna_without_keys_yields_nothing():
+    assert AdzunaAdapter(app_id='', app_key='').run() == []
+
+
 def test_lever_normalise_basic():
     row = {
         'id': 'lv-1',
@@ -192,6 +222,15 @@ def test_greenhouse_fetch_with_injected_transport():
     adapter = GreenhouseAdapter(tokens=['acme'], transport=httpx.MockTransport(handler))
     out = adapter.run()
     assert [p['external_id'] for p in out] == ['7']
+
+
+def test_fetch_survives_non_json_200_response():
+    """A 200 with a non-JSON body must yield nothing, not raise."""
+    def handler(request):
+        return httpx.Response(200, text='<html>maintenance</html>')
+
+    adapter = GreenhouseAdapter(tokens=['acme'], transport=httpx.MockTransport(handler))
+    assert adapter.run() == []
 
 
 def test_make_posting_coerces_blank_and_odd_values():
