@@ -82,6 +82,11 @@ export const Tailoring = {
     api.post('/tailoring/resume/', { application_id: applicationId }).then((r) => r.data),
   coverLetter: (applicationId: number) =>
     api.post('/tailoring/cover-letter/', { application_id: applicationId }).then((r) => r.data),
+  exportResume: (applicationId: number, fmt: 'txt' | 'docx' = 'txt') =>
+    api.get('/tailoring/resume/export/', {
+      params: { application_id: applicationId, fmt },
+      responseType: 'blob',
+    }).then((r) => r.data as Blob),
 };
 
 export const Interview = {

@@ -1,13 +1,80 @@
+from django.http import HttpResponse
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ai.providers import configured_model_label, get_configured_llm
 from applications.models import Application, ApplicationEvent, ApplicationStatus
+from resumes.ats_export import build_ats_docx, build_ats_resume
 from resumes.models import Resume
 
 from .generators import draft_cover_letter, tailor_resume
 from .models import CoverLetter, TailoredResume
+
+
+def _export_dict(user, tailored_summary: str = '') -> dict:
+    """Assemble the ATS-export dict from the user's StructuredProfile, overlaying
+    a tailored summary when one was generated for this application."""
+    profile = getattr(user, 'structured_profile', None)
+    if profile is None:
+        return {'full_name': user.get_full_name() or user.username,
+                'email': user.email, 'summary': tailored_summary}
+    return {
+        'full_name': profile.full_name or user.get_full_name() or user.username,
+        'headline': profile.headline,
+        'email': user.email,
+        'phone': profile.phone,
+        'location': profile.location,
+        'links': [link for link in (profile.website, profile.linkedin, profile.github) if link],
+        'summary': tailored_summary or profile.summary,
+        'skills': [{'name': s.name} for s in profile.skills.all()],
+        'experiences': [{
+            'title': e.title, 'company': e.company, 'location': e.location,
+            'start': e.start_date.isoformat() if e.start_date else '',
+            'end': e.end_date.isoformat() if e.end_date else '',
+            'is_current': e.is_current, 'bullets': e.bullets or [],
+        } for e in profile.experiences.all()],
+        'educations': [{
+            'degree': ed.degree, 'field_of_study': ed.field_of_study,
+            'institution': ed.institution,
+            'end': ed.end_date.isoformat() if ed.end_date else '', 'gpa': ed.gpa,
+        } for ed in profile.educations.all()],
+        'projects': [{'name': p.name, 'description': p.description} for p in profile.projects.all()],
+    }
+
+
+class ExportResumeView(APIView):
+    """ATS-safe résumé download. `?application_id=` overlays that application's
+    tailored summary; `?format=docx` returns a .docx, otherwise plain text."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        tailored_summary = ''
+        app_id = request.query_params.get('application_id')
+        if app_id:
+            app = Application.objects.filter(pk=app_id, user=request.user).first()
+            if app is None:
+                return Response({'detail': 'Application not found.'}, status=404)
+            tailored = TailoredResume.objects.filter(application=app).first()
+            if tailored:
+                tailored_summary = (tailored.content or {}).get('summary', '')
+
+        data = _export_dict(request.user, tailored_summary)
+        # NB: use `fmt`, not `format` — DRF reserves `?format=` for content
+        # negotiation and raises Http404 for an unknown renderer name.
+        fmt = request.query_params.get('fmt', 'txt').lower()
+        if fmt == 'docx':
+            payload = build_ats_docx(data)
+            response = HttpResponse(
+                payload,
+                content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            )
+            response['Content-Disposition'] = 'attachment; filename="resume-ats.docx"'
+            return response
+        response = HttpResponse(build_ats_resume(data), content_type='text/plain; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="resume-ats.txt"'
+        return response
 
 
 class TailorResumeView(APIView):

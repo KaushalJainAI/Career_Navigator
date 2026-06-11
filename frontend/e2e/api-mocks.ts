@@ -162,6 +162,14 @@ export async function mockCareerNavigatorApi(page: Page) {
         content: 'Dear Acme Labs, I would love to build your pipelines...',
       });
     }
+    if (method === 'GET' && path === '/api/v1/tailoring/resume/export/') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/plain; charset=utf-8',
+        headers: { 'Content-Disposition': 'attachment; filename="resume-ats.txt"' },
+        body: 'DEMO USER\n\nSKILLS\nPython, Django\n',
+      });
+    }
 
     // --- applications status change ---
     if (method === 'PATCH' && /^\/api\/v1\/applications\/\d+\/$/.test(path)) {

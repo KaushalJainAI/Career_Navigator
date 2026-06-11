@@ -85,6 +85,19 @@ export function JobDetail() {
     }
   }
 
+  async function downloadResume(fmt: 'txt' | 'docx') {
+    if (!prepared) return;
+    const blob = await Tailoring.exportResume(prepared.application.id, fmt);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `resume-ats.${fmt}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   if (!job) return <p>Loading...</p>;
   return (
     <section className="space-y-5">
@@ -168,6 +181,12 @@ export function JobDetail() {
           <div className="mt-4 flex flex-wrap gap-2">
             <button className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60" disabled={materialsBusy} onClick={generateMaterials}>
               {materialsBusy ? 'Generating...' : 'Generate materials'}
+            </button>
+            <button className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 hover:bg-slate-50" onClick={() => downloadResume('txt')}>
+              ATS resume .txt
+            </button>
+            <button className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 hover:bg-slate-50" onClick={() => downloadResume('docx')}>
+              .docx
             </button>
             {prepared.apply_url && (
               <a className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white" href={prepared.apply_url} target="_blank" rel="noreferrer">

@@ -2,7 +2,9 @@ import pytest
 
 from applications.models import Application, ApplicationStatus
 from jobs.models import Company, JobPosting, Source
+from profiles.models import Experience, Skill, StructuredProfile
 from resumes.models import Resume
+from tailoring.models import TailoredResume
 
 pytestmark = pytest.mark.django_db
 
@@ -49,3 +51,47 @@ def test_cover_letter_endpoint_records_event(auth_client, user, monkeypatch):
     assert response.status_code == 200
     assert response.data['content']
     assert app.events.filter(type='cover_letter_generated').exists()
+
+
+def test_export_resume_txt_renders_ats_safe_text_from_profile(auth_client, user):
+    profile = StructuredProfile.objects.create(
+        user=user, full_name='Jane Doe', headline='Backend Engineer', summary='Builds APIs.',
+        location='Remote',
+    )
+    Skill.objects.create(profile=profile, name='Python')
+    Experience.objects.create(profile=profile, company='Acme', title='Senior Engineer', is_current=True)
+
+    response = auth_client.get('/api/v1/tailoring/resume/export/')
+
+    assert response.status_code == 200
+    assert response['Content-Type'].startswith('text/plain')
+    assert 'attachment' in response['Content-Disposition']
+    body = response.content.decode()
+    assert body.startswith('JANE DOE')
+    assert 'SKILLS\nPython' in body
+    assert 'Senior Engineer - Acme' in body
+
+
+def test_export_resume_overlays_tailored_summary(auth_client, user):
+    StructuredProfile.objects.create(user=user, full_name='Jane Doe', summary='Generic summary.')
+    app = _application(user)
+    TailoredResume.objects.create(
+        application=app, content={'raw_text': '...', 'summary': 'Tailored for this exact role.'},
+    )
+
+    response = auth_client.get(f'/api/v1/tailoring/resume/export/?application_id={app.id}')
+
+    body = response.content.decode()
+    assert 'Tailored for this exact role.' in body
+    assert 'Generic summary.' not in body
+
+
+def test_export_resume_docx_returns_attachment(auth_client, user):
+    StructuredProfile.objects.create(user=user, full_name='Jane Doe', summary='Builds APIs.')
+
+    response = auth_client.get('/api/v1/tailoring/resume/export/?fmt=docx')
+
+    assert response.status_code == 200
+    assert 'wordprocessingml' in response['Content-Type']
+    assert response['Content-Disposition'].endswith('resume-ats.docx"')
+    assert len(response.content) > 0

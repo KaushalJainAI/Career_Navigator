@@ -13,6 +13,11 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 ## Recently Completed
 
 - Created this project progress tracker.
+- ATS-safe résumé export shipped (2026-06-12):
+  - New `backend/resumes/ats_export.py`: deterministic, dependency-light builders that render the user's StructuredProfile as a single-column, ATS-parseable résumé — plain text (`build_ats_resume`) and a minimal table-free `.docx` (`build_ats_docx`, reusing the text builder so the formats never diverge). Standard ALL-CAPS section headers, comma-separated skills, ASCII `- ` bullets, HTML/glyph sanitisation.
+  - `GET /api/v1/tailoring/resume/export/?application_id=&fmt=txt|docx` streams the file as an attachment; `application_id` overlays that application's tailored summary. (Param is `fmt`, not `format`, to avoid DRF's content-negotiation override.)
+  - Job detail gains "ATS resume .txt" / ".docx" download buttons in the materials panel.
+  - Tests: `resumes/tests/test_ats_export.py` (text sections/sanitisation/degradation + valid table-free docx), tailoring API tests (txt, tailored-summary overlay, docx attachment), and a Playwright download assertion.
 - Match explainability shipped (2026-06-12):
   - `matching/scorer.py` now returns `matched_skills` and a structured `explanation` (colour-coded positive/negative/neutral reasons: skill coverage %, named skill gaps, text-similarity %) alongside the existing score/breakdown/gaps.
   - `MatchScore` gains `matched_skills` + `explanation` JSON fields (migration `matching/0002`); the match endpoint persists and returns them.
@@ -174,7 +179,7 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 
 ### Phase 2 Discovery Sources
 
-- Adzuna, Greenhouse, Jooble, JSearch, and Lever backend adapters are implemented and registered in `ingestion/tasks.py::ADAPTER_REGISTRY`, with `httpx.MockTransport` unit tests (normalise + fetch paging, no-key skip, and failure branches), a fetch→DB integration test, and a shared resilient base layer (167 backend tests passing as of 2026-06-12, including the Ghost-Job Shield + match-explainability suites).
+- Adzuna, Greenhouse, Jooble, JSearch, and Lever backend adapters are implemented and registered in `ingestion/tasks.py::ADAPTER_REGISTRY`, with `httpx.MockTransport` unit tests (normalise + fetch paging, no-key skip, and failure branches), a fetch→DB integration test, and a shared resilient base layer (173 backend tests passing as of 2026-06-12, including the Ghost-Job Shield, match-explainability, and ATS-export suites).
 - Greenhouse and Lever were smoke-tested live against real public boards on 2026-06-11 (stripe: 496 postings, mistral: 173, all contract-valid) via `backend/scripts/smoke_adapters.py`.
 - Jooble/JSearch need API keys (`JOOBLE_API_KEY`, `JSEARCH_RAPIDAPI_KEY`) before a live smoke run; production ingestion also needs `LEVER_TOKENS`/`GREENHOUSE_TOKENS` set to the boards we want to track.
 - Playwright scraper framework, email-forward parsing, and web-search/CLI-delegate fallback are planned but not implemented.
