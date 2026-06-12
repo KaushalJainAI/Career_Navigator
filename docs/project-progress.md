@@ -13,6 +13,14 @@ Career Navigator is past the initial scaffold. The core Django backend, React fr
 ## Recently Completed
 
 - Created this project progress tracker.
+- Portal automation app (`portals`) — browser-driven, no-API scraping foundation shipped (2026-06-12):
+  - New Django app for the sources that publish **no API** — LinkedIn, Naukri, Unstop, Y Combinator (Work at a Startup). Plan: [portal-automation-plan.md](portal-automation-plan.md).
+  - Injectable `BrowserDriver` (`drivers.py`): real `PlaywrightDriver` (lazy `sync_playwright` import, polite delays + human-like scrolling) and `FakeBrowserDriver` for tests, so the whole stack runs with no Chromium or network in CI.
+  - Four scrapers (`scrapers/linkedin|naukri|unstop|ycombinator.py`) with **pure** `parse_list` functions (lxml) that emit the canonical `ingestion.adapters.base.make_posting` dict and flow through `ingestion.services.upsert_postings` — so Ghost-Job Shield, matching, and the stealth filter all apply for free.
+  - Sessions are the **user's own** (vision principle: never a shared scraping account): per-user `PortalAccount` with AES-GCM-encrypted Playwright `storage_state`, falling back to env session cookies (`LINKEDIN_SESSION_COOKIE`, etc.). A missing session yields a clean `needs_login` run, not a crash. Login/MFA stays a human handoff.
+  - REST surface (`/api/v1/portals/`): list portals + connection status, store/forget a session (write-only), trigger a scrape (sync in dev, Celery in prod, gated by `PORTAL_SCRAPER_ENABLED`), list runs.
+  - 24 tests (parse fixtures per portal, `FakeBrowserDriver` service runs incl. needs-login + idempotent rerun, DB/env/none session resolution, API). Backend suite now 202.
+  - **Remaining (needs live tuning, not unit-verifiable here):** real per-portal CSS selectors (marked `# LIVE-SELECTOR`), frontend session-connect UX, optional opt-in password AuthFlow behind HITL.
 - Response-rate analytics shipped (2026-06-12):
   - New `backend/applications/analytics.py`: a pure function computing the application funnel (applied → phone → onsite → offer), overall response/offer rates, a per-tier breakdown (assist/autofill/autonomous), and average days to first response. It reads `status_changed` event history (not just current status), so an application that reached a phone screen and was later rejected still counts as a response.
   - `GET /api/v1/applications/analytics/` returns the payload; the dashboard renders a panel with headline stats and a funnel bar chart.

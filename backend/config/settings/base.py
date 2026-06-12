@@ -102,6 +102,7 @@ INSTALLED_APPS = [
     'credentials',
     'extension_api',
     'vault',
+    'portals',
     'billing',
     'streaming',
 ]
@@ -257,6 +258,22 @@ JOOBLE_API_KEY = os.environ.get('JOOBLE_API_KEY', '')
 JSEARCH_RAPIDAPI_KEY = os.environ.get('JSEARCH_RAPIDAPI_KEY', '')
 GREENHOUSE_TOKENS = _split_env_list(os.environ.get('GREENHOUSE_TOKENS', ''))
 LEVER_TOKENS = _split_env_list(os.environ.get('LEVER_TOKENS', ''))
+
+# Portal automation (browser-driven, no-API sources: LinkedIn/Naukri/Unstop/YC).
+# Off by default; a deploy that wants it sets PORTAL_SCRAPER_ENABLED=True and
+# `playwright install chromium`. Sessions come from a per-user PortalAccount or,
+# as a fallback, these env-provided session cookies (the user's own session —
+# never a shared scraping account).
+PORTAL_SCRAPER_ENABLED = os.environ.get('PORTAL_SCRAPER_ENABLED', 'False') == 'True'
+PORTAL_SCRAPER_HEADLESS = os.environ.get('PORTAL_SCRAPER_HEADLESS', 'True') == 'True'
+PORTAL_SCRAPER_MIN_DELAY_SECONDS = float(os.environ.get('PORTAL_SCRAPER_MIN_DELAY_SECONDS', '1.5'))
+PORTAL_SCRAPER_MAX_RESULTS = int(os.environ.get('PORTAL_SCRAPER_MAX_RESULTS', '25'))
+PORTAL_SESSION_COOKIES = {
+    'linkedin': os.environ.get('LINKEDIN_SESSION_COOKIE', ''),
+    'naukri': os.environ.get('NAUKRI_SESSION_COOKIE', ''),
+    'unstop': os.environ.get('UNSTOP_SESSION_COOKIE', ''),
+    'ycombinator': os.environ.get('YC_SESSION_COOKIE', ''),
+}
 
 # --- Notification channels ---
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')

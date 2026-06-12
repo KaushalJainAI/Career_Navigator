@@ -18,6 +18,7 @@ api_v1 = [
     path('credentials/', include('credentials.urls')),
     path('ext/', include('extension_api.urls')),
     path('vault/', include('vault.urls')),
+    path('portals/', include('portals.urls')),
     path('billing/', include('billing.urls')),
 ]
 
