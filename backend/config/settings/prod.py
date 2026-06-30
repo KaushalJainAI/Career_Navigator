@@ -10,6 +10,15 @@ from .base import *  # noqa: F401,F403
 
 DEBUG = False
 
+# Serve collected static (admin, DRF, Swagger) directly from the ASGI process
+# behind nginx — no separate static host needed. WhiteNoise sits right after the
+# security middleware. nginx proxies /static/ to this process.
+MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')  # noqa: F405
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage'},
+}
+
 # Hosts/CORS come from .env. ALLOWED_HOSTS is already extended from
 # the ALLOWED_HOSTS env var in base.py; we just enforce that prod sets it.
 if not os.environ.get('ALLOWED_HOSTS'):
