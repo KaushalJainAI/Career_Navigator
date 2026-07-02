@@ -55,6 +55,7 @@ export const Resumes = {
     return api.post('/resumes/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       .then((r) => r.data);
   },
+  remove: (id: number) => api.delete(`/resumes/${id}/`).then((r) => r.data),
 };
 
 export const Jobs = {
@@ -76,6 +77,24 @@ export const Applications = {
     api.patch(`/applications/${id}/`, payload).then((r) => r.data),
   approve: (id: number) =>
     api.post(`/applications/${id}/approve/`).then((r) => r.data as { approval_token: string }),
+};
+
+export const Todos = {
+  list: () => api.get('/applications/todos/').then((r) => r.data),
+  create: (payload: { title: string; due_on?: string | null; application?: number | null }) =>
+    api.post('/applications/todos/', payload).then((r) => r.data),
+  patch: (id: number, payload: Record<string, unknown>) =>
+    api.patch(`/applications/todos/${id}/`, payload).then((r) => r.data),
+  remove: (id: number) => api.delete(`/applications/todos/${id}/`).then((r) => r.data),
+};
+
+export const Goals = {
+  list: () => api.get('/applications/goals/').then((r) => r.data),
+  create: (payload: { title: string; metric: string; target: number; period: string; manual_progress?: number }) =>
+    api.post('/applications/goals/', payload).then((r) => r.data),
+  patch: (id: number, payload: Record<string, unknown>) =>
+    api.patch(`/applications/goals/${id}/`, payload).then((r) => r.data),
+  remove: (id: number) => api.delete(`/applications/goals/${id}/`).then((r) => r.data),
 };
 
 export const Tailoring = {
@@ -151,6 +170,27 @@ export const Network = {
     remove: (id: number) =>
       api.delete(`/networking/relationships/${id}/`).then((r) => r.data),
   },
+  referrals: {
+    list: (jobId?: number) =>
+      api.get('/networking/referrals/', { params: jobId ? { job_id: jobId } : {} }).then((r) => r.data),
+  },
+  outreach: {
+    list: () => api.get('/networking/outreach/').then((r) => r.data),
+    draft: (contactId: number, jobId?: number) =>
+      api.post('/networking/outreach/', { contact_id: contactId, job_id: jobId }).then((r) => r.data),
+    approve: (id: number, approvedBody?: string) =>
+      api.post(`/networking/outreach/${id}/approve/`, approvedBody ? { approved_body: approvedBody } : {}).then((r) => r.data),
+  },
+  queue: {
+    list: (status = 'open') =>
+      api.get('/networking/queue/', { params: { status } }).then((r) => r.data),
+  },
+  companies: {
+    list: () => api.get('/networking/companies/').then((r) => r.data),
+    get: (id: number) => api.get(`/networking/companies/${id}/`).then((r) => r.data),
+    patch: (id: number, payload: Record<string, unknown>) =>
+      api.patch(`/networking/companies/${id}/`, payload).then((r) => r.data),
+  },
 };
 
 export const Notifications = {
@@ -162,6 +202,7 @@ export const Notifications = {
   deleteSubscription: (id: number) =>
     api.delete(`/notifications/subscriptions/${id}/`).then((r) => r.data),
   alerts: () => api.get('/notifications/alerts/').then((r) => r.data),
+  activity: () => api.get('/notifications/activity/').then((r) => r.data),
   markRead: (id: number) => api.post(`/notifications/alerts/${id}/read/`).then((r) => r.data),
 };
 

@@ -63,6 +63,9 @@ class Application(models.Model):
         AutoApplySession, null=True, blank=True, on_delete=models.SET_NULL, related_name='application'
     )
     notes = models.TextField(blank=True)
+    # The single most useful tracker fields: what to do next, and when to chase it.
+    next_action = models.CharField(max_length=255, blank=True)
+    follow_up_on = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -79,3 +82,48 @@ class ApplicationEvent(models.Model):
 
     class Meta:
         ordering = ['created_at']
+
+
+class Todo(models.Model):
+    """A job-hunt task. Optionally tied to a specific application (e.g. "follow up
+    with the recruiter at Acme")."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='todos')
+    title = models.CharField(max_length=255)
+    done = models.BooleanField(default=False)
+    due_on = models.DateField(null=True, blank=True)
+    application = models.ForeignKey(
+        Application, null=True, blank=True, on_delete=models.SET_NULL, related_name='todos'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Open first, then earliest due date, then newest.
+        ordering = ['done', models.F('due_on').asc(nulls_last=True), '-created_at']
+
+
+class Goal(models.Model):
+    """A target the user is working toward. For built-in metrics, progress is
+    computed live from the real application pipeline; `custom` uses manual_progress."""
+
+    class Metric(models.TextChoices):
+        APPLICATIONS = 'applications', 'Applications submitted'
+        INTERVIEWS = 'interviews', 'Interviews reached'
+        OFFERS = 'offers', 'Offers received'
+        CUSTOM = 'custom', 'Custom'
+
+    class Period(models.TextChoices):
+        WEEK = 'week', 'This week'
+        MONTH = 'month', 'This month'
+        ALL = 'all', 'All time'
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='goals')
+    title = models.CharField(max_length=255)
+    metric = models.CharField(max_length=24, choices=Metric.choices, default=Metric.APPLICATIONS)
+    target = models.PositiveIntegerField(default=1)
+    period = models.CharField(max_length=8, choices=Period.choices, default=Period.WEEK)
+    manual_progress = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']

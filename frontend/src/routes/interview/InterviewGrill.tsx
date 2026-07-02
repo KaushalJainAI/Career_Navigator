@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useInterviewStore } from '../../stores/useInterviewStore';
+import { CreditCost, CreditWall, insufficientCredits, type CreditShortfall } from '../../components/Credits';
+import { useBillingStore } from '../../stores/useBillingStore';
 
 const STAGES = ['recruiter', 'tech_phone', 'system_design', 'behavioral', 'role_specific'];
 
@@ -10,8 +12,22 @@ export function InterviewGrill() {
   const [stage, setStage] = useState('behavioral');
   const [text, setText] = useState('');
   const [report, setReport] = useState<{ overall_score: number; gaps: string[]; study_plan: { topic: string; action: string }[] } | null>(null);
+  const [creditWall, setCreditWall] = useState<CreditShortfall | null>(null);
+  const cost = useBillingStore((s) => s.costByReason);
+  const refreshBalance = useBillingStore((s) => s.refresh);
 
   const current = questions[currentIndex];
+
+  async function onStart() {
+    setCreditWall(null);
+    try {
+      await start({ role, stage });
+      refreshBalance();
+    } catch (e) {
+      const short = insufficientCredits(e);
+      if (short) setCreditWall(short);
+    }
+  }
 
   async function onAnswer() {
     if (!text.trim()) return;
@@ -33,12 +49,17 @@ export function InterviewGrill() {
           {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <button
-          className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white sm:w-auto"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white sm:w-auto"
           disabled={loading}
-          onClick={() => start({ role, stage })}
+          onClick={onStart}
         >
           {loading ? 'Researching...' : 'Begin grilling'}
+          {cost.mock_interview ? <CreditCost cost={cost.mock_interview} className="!bg-white/20 !text-white" /> : null}
         </button>
+        {creditWall && <CreditWall info={creditWall} />}
+        <p className="text-xs font-semibold text-slate-400">
+          We research the company and build a tailored question bank, then grill you live and score each answer.
+        </p>
       </section>
     );
   }

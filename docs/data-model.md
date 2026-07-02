@@ -111,6 +111,8 @@ The orchestrator-level HITL check + the in-tool re-check both compare against `A
 
 Referral graph + warm-intro outreach. Outreach is draft-only and gated by the same approval-token pattern as auto-apply (see vision principle 9).
 
+> **Company hub is a derived read view, not a table.** `networking/company_hub.py` joins `Contact`/`ContactEmployment`, `JobPosting`, and `Application` at query time to power `/networking/companies/` and the `/companies/:id` page. The company↔application relationship is derived through `Application → JobPosting → Company` — there is no `Application.company` FK to migrate. The interactive network graph reads the same `Contact.company` FK + the relationship/employment tables (`networking/graph.py`); adding people or edges from the graph GUI just creates `Contact`/`ContactRelationship`/`ContactEmployment` rows.
+
 | Model | Key fields | Notes |
 |---|---|---|
 | `Contact` | `user`, `company`, `name`, `title`, `source`, `relationship_strength`, `tags` | Indexed on `(user, name)` and `(user, email)`. `source` enum: manual/csv/google/profile_url/public_page. |

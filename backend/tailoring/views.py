@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 
 from ai.providers import configured_model_label, get_configured_llm
 from applications.models import Application, ApplicationEvent, ApplicationStatus
+from billing.services import charge
 from resumes.ats_export import build_ats_docx, build_ats_resume
 from resumes.models import Resume
 
@@ -86,6 +87,8 @@ class TailorResumeView(APIView):
         master = Resume.objects.filter(user=request.user, is_master=True).first()
         if master is None:
             return Response({'detail': 'No master resume.'}, status=400)
+        # Charge before the (paid) LLM work; a broke user is 402'd, never half-served.
+        charge(request.user, 'tailor_resume', meta={'application_id': app.id})
         llm = get_configured_llm()
         out = tailor_resume(
             master.parsed_json or {},
@@ -115,6 +118,7 @@ class DraftCoverLetterView(APIView):
         app_id = request.data.get('application_id')
         app = Application.objects.select_related('job', 'job__company').get(pk=app_id, user=request.user)
         master = Resume.objects.filter(user=request.user, is_master=True).first()
+        charge(request.user, 'cover_letter', meta={'application_id': app.id})
         llm = get_configured_llm()
         text = draft_cover_letter(
             master.parsed_json if master else {},

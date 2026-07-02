@@ -3,13 +3,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from billing.services import charge
 from jobs.ghost import band_for
 from jobs.models import JobPosting
 from matching.models import MatchScore
 
 from .analytics import build_response_analytics
-from .models import Application, ApplicationEvent, ApplicationStatus, AutoApplySession, AutoApplyTier
-from .serializers import ApplicationSerializer
+from .models import Application, ApplicationEvent, ApplicationStatus, AutoApplySession, AutoApplyTier, Goal, Todo
+from .serializers import ApplicationSerializer, GoalSerializer, TodoSerializer
 
 
 class ApplicationListCreateView(generics.ListCreateAPIView):
@@ -76,6 +77,9 @@ class PrepareApplicationView(APIView):
 
         approval_token = ''
         if tier == AutoApplyTier.AUTONOMOUS:
+            # Charge once per application, when the autonomous session is first set up.
+            if app.auto_apply_session is None:
+                charge(request.user, 'autonomous_apply', meta={'application_id': app.id})
             session = app.auto_apply_session or AutoApplySession.objects.create(
                 user=request.user,
                 paused_reason='Review generated application before submit.',
@@ -178,3 +182,41 @@ class ResponseAnalyticsView(APIView):
     def get(self, request):
         applications = Application.objects.filter(user=request.user).prefetch_related('events')
         return Response(build_response_analytics(applications))
+
+
+class TodoListCreateView(generics.ListCreateAPIView):
+    serializer_class = TodoSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Todo.objects.filter(user=self.request.user).select_related('application', 'application__job')
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class TodoDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = TodoSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Todo.objects.filter(user=self.request.user)
+
+
+class GoalListCreateView(generics.ListCreateAPIView):
+    serializer_class = GoalSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Goal.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class GoalDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = GoalSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Goal.objects.filter(user=self.request.user)

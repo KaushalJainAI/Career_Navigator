@@ -41,7 +41,7 @@ export function JobsList() {
           {[1, 2, 3, 4].map(i => <div key={i} className="h-28 bg-slate-200 animate-pulse rounded-xl" />)}
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-2.5 sm:space-y-4">
           {jobs.length === 0 && (
             <div className="text-center py-12 bg-white rounded-xl border border-dashed border-slate-300">
               <Search className="mx-auto h-12 w-12 text-slate-300 mb-3" />
@@ -53,18 +53,18 @@ export function JobsList() {
             <Link 
               key={j.id} 
               to={`/jobs/${j.id}`}
-              className="group block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 hover:border-brand-300 hover:shadow-md sm:p-5"
+              className="group block rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-all duration-200 hover:border-brand-300 hover:shadow-md sm:p-5"
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3 sm:gap-4">
-                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xl font-bold text-slate-500 sm:h-12 sm:w-12">
+                <div className="flex min-w-0 items-start gap-2.5 sm:gap-4">
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-base font-bold text-slate-500 sm:h-12 sm:w-12 sm:text-xl">
                     {j.company?.name?.[0] || '?'}
                   </div>
                   <div className="min-w-0">
-                    <h2 className="text-base font-bold text-slate-800 transition-colors group-hover:text-brand-600 sm:text-lg">
+                    <h2 className="text-sm font-bold text-slate-800 transition-colors group-hover:text-brand-600 sm:text-lg">
                       {j.title}
                     </h2>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-500 sm:gap-x-4">
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-slate-500 sm:mt-2 sm:gap-x-4 sm:text-sm">
                       <span className="flex min-w-0 items-center gap-1.5">
                         <Building className="h-4 w-4 flex-shrink-0 text-slate-400" />
                         {j.company?.name}

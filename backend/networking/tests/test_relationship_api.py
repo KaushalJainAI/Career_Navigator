@@ -161,3 +161,18 @@ def test_warm_intros_endpoint(client, user, acme):
     assert resp.data['company']['id'] == acme.id
     assert len(resp.data['results']) == 1
     assert resp.data['results'][0]['contact_id'] == c.id
+
+
+@pytest.mark.django_db
+def test_contact_create_with_company_name_resolves_and_displays(client, user):
+    resp = client.post('/api/v1/networking/contacts/', {
+        'name': 'Dana Fox', 'title': 'Staff Engineer', 'company_name': 'Globex',
+        'relationship_strength': 4, 'tags': ['referral'],
+    }, format='json')
+    assert resp.status_code == 201
+    assert resp.data['company_name'] == 'Globex'
+    contact = Contact.objects.get(id=resp.data['id'])
+    assert contact.company is not None and contact.company.name == 'Globex'
+    # Company is reused, not duplicated, on a second contact.
+    client.post('/api/v1/networking/contacts/', {'name': 'Eli Vance', 'company_name': 'Globex'}, format='json')
+    assert Company.objects.filter(name='Globex').count() == 1

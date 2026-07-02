@@ -1,6 +1,15 @@
 from rest_framework import serializers
 
-from .models import Education, Experience, Preference, Project, Skill, StructuredProfile
+from .models import (
+    Certification,
+    Education,
+    Experience,
+    Language,
+    Preference,
+    Project,
+    Skill,
+    StructuredProfile,
+)
 
 
 class ExperienceSerializer(serializers.ModelSerializer):
@@ -27,6 +36,18 @@ class ProjectSerializer(serializers.ModelSerializer):
         exclude = ['profile']
 
 
+class CertificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Certification
+        exclude = ['profile']
+
+
+class LanguageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Language
+        exclude = ['profile']
+
+
 class PreferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Preference
@@ -38,6 +59,8 @@ class StructuredProfileSerializer(serializers.ModelSerializer):
     educations = EducationSerializer(many=True, required=False)
     skills = SkillSerializer(many=True, required=False)
     projects = ProjectSerializer(many=True, required=False)
+    certifications = CertificationSerializer(many=True, required=False)
+    languages = LanguageSerializer(many=True, required=False)
     preference = PreferenceSerializer(required=False)
     readiness = serializers.SerializerMethodField()
 
@@ -71,6 +94,8 @@ class StructuredProfileSerializer(serializers.ModelSerializer):
         'educations': Education,
         'skills': Skill,
         'projects': Project,
+        'certifications': Certification,
+        'languages': Language,
     }
 
     def update(self, instance, validated_data):

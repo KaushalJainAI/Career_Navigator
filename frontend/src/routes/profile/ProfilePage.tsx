@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Profile } from '../../api/endpoints';
-import { Plus, Trash2, Save, User2, Briefcase, GraduationCap, FolderGit2, Sparkles } from 'lucide-react';
+import { Profile, Resumes } from '../../api/endpoints';
+import { Plus, Trash2, Save, User2, Briefcase, GraduationCap, FolderGit2, Sparkles, Target, FileText, UploadCloud, Award, Languages as LanguagesIcon } from 'lucide-react';
 
 interface Experience {
   company: string;
@@ -21,6 +21,17 @@ interface Education {
 }
 interface SkillRow { name: string; proficiency?: string; years?: number | null }
 interface ProjectRow { name: string; description?: string; url?: string; tech_stack?: string[] }
+interface CertificationRow { name: string; issuer?: string; issue_date?: string; credential_url?: string }
+interface LanguageRow { name: string; proficiency?: string }
+interface PreferenceData {
+  target_titles: string[];
+  locations: string[];
+  keywords: string[];
+  remote: boolean;
+  salary_min: number | null;
+  seniority: string;
+  work_auth: string;
+}
 
 interface ProfileData {
   full_name: string;
@@ -35,13 +46,23 @@ interface ProfileData {
   educations: Education[];
   skills: SkillRow[];
   projects: ProjectRow[];
+  certifications: CertificationRow[];
+  languages: LanguageRow[];
+  preference: PreferenceData;
   readiness?: { score: number; ready: boolean; missing: string[] };
 }
+
+const EMPTY_PREF: PreferenceData = {
+  target_titles: [], locations: [], keywords: [], remote: true,
+  salary_min: null, seniority: '', work_auth: '',
+};
 
 const EMPTY: ProfileData = {
   full_name: '', headline: '', summary: '', location: '', phone: '',
   website: '', linkedin: '', github: '',
   experiences: [], educations: [], skills: [], projects: [],
+  certifications: [], languages: [],
+  preference: EMPTY_PREF,
 };
 
 export function ProfilePage() {
@@ -52,13 +73,17 @@ export function ProfilePage() {
 
   useEffect(() => {
     Profile.get()
-      .then((d) => setData({ ...EMPTY, ...d, skills: d.skills ?? [], experiences: d.experiences ?? [], educations: d.educations ?? [], projects: d.projects ?? [] }))
+      .then((d) => setData({ ...EMPTY, ...d, skills: d.skills ?? [], experiences: d.experiences ?? [], educations: d.educations ?? [], projects: d.projects ?? [], certifications: d.certifications ?? [], languages: d.languages ?? [], preference: { ...EMPTY_PREF, ...(d.preference ?? {}) } }))
       .catch(() => setStatus({ kind: 'err', text: 'Could not load your profile.' }))
       .finally(() => setLoading(false));
   }, []);
 
   function set<K extends keyof ProfileData>(key: K, value: ProfileData[K]) {
     setData((d) => ({ ...d, [key]: value }));
+  }
+
+  function setPref<K extends keyof PreferenceData>(key: K, value: PreferenceData[K]) {
+    setData((d) => ({ ...d, preference: { ...d.preference, [key]: value } }));
   }
 
   async function save() {
@@ -78,8 +103,11 @@ export function ProfilePage() {
         educations: data.educations,
         skills: data.skills,
         projects: data.projects,
+        certifications: data.certifications,
+        languages: data.languages,
+        preference: data.preference,
       });
-      setData({ ...EMPTY, ...saved, skills: saved.skills ?? [], experiences: saved.experiences ?? [], educations: saved.educations ?? [], projects: saved.projects ?? [] });
+      setData({ ...EMPTY, ...saved, skills: saved.skills ?? [], experiences: saved.experiences ?? [], educations: saved.educations ?? [], projects: saved.projects ?? [], certifications: saved.certifications ?? [], languages: saved.languages ?? [], preference: { ...EMPTY_PREF, ...(saved.preference ?? {}) } });
       setStatus({ kind: 'ok', text: 'Profile saved.' });
     } catch {
       setStatus({ kind: 'err', text: 'Save failed. Check the highlighted fields and try again.' });
@@ -172,6 +200,37 @@ export function ProfilePage() {
         />
       </Card>
 
+      {/* Job search preferences */}
+      <Card icon={Target} title="Job search preferences">
+        <p className="mb-3 text-sm text-slate-500">Drives which roles get matched and surfaced to you.</p>
+        <div className="space-y-4">
+          <div>
+            <Label>Target titles</Label>
+            <TagInput values={data.preference.target_titles} onChange={(v) => setPref('target_titles', v)} placeholder="e.g. Backend Engineer" />
+          </div>
+          <div>
+            <Label>Preferred locations</Label>
+            <TagInput values={data.preference.locations} onChange={(v) => setPref('locations', v)} placeholder="e.g. Remote, Bengaluru" />
+          </div>
+          <div>
+            <Label>Keywords to match on</Label>
+            <TagInput values={data.preference.keywords} onChange={(v) => setPref('keywords', v)} placeholder="Skills / tech" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Minimum salary" type="number" value={data.preference.salary_min?.toString() ?? ''} onChange={(v) => setPref('salary_min', v ? Number(v) : null)} />
+            <Field label="Seniority" value={data.preference.seniority} onChange={(v) => setPref('seniority', v)} placeholder="e.g. senior" />
+            <Field label="Work authorization" value={data.preference.work_auth} onChange={(v) => setPref('work_auth', v)} placeholder="e.g. Citizen, H1B" />
+          </div>
+          <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input type="checkbox" checked={data.preference.remote} onChange={(e) => setPref('remote', e.target.checked)} />
+            Open to remote roles
+          </label>
+        </div>
+      </Card>
+
+      {/* Resumes */}
+      <ResumesSection />
+
       {/* Experience */}
       <Card icon={Briefcase} title="Experience" onAdd={() => set('experiences', [...data.experiences, { company: '', title: '', bullets: [] }])}>
         {data.experiences.length === 0 && <Empty text="No experience added yet." />}
@@ -255,10 +314,51 @@ export function ProfilePage() {
           ))}
         </div>
       </Card>
+
+      {/* Certifications */}
+      <Card icon={Award} title="Certifications" onAdd={() => set('certifications', [...data.certifications, { name: '' }])}>
+        {data.certifications.length === 0 && <Empty text="No certifications added yet." />}
+        <div className="space-y-4">
+          {data.certifications.map((c, i) => (
+            <RowCard key={i} onRemove={() => set('certifications', data.certifications.filter((_, j) => j !== i))}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Name" value={c.name} onChange={(v) => updateItem('certifications', i, { name: v })} placeholder="AWS Solutions Architect" />
+                <Field label="Issuer" value={c.issuer ?? ''} onChange={(v) => updateItem('certifications', i, { issuer: v })} placeholder="Amazon Web Services" />
+                <Field label="Issued" value={c.issue_date ?? ''} onChange={(v) => updateItem('certifications', i, { issue_date: v })} placeholder="Mar 2024" />
+                <Field label="Credential URL" value={c.credential_url ?? ''} onChange={(v) => updateItem('certifications', i, { credential_url: v })} placeholder="https://" />
+              </div>
+            </RowCard>
+          ))}
+        </div>
+      </Card>
+
+      {/* Languages */}
+      <Card icon={LanguagesIcon} title="Languages" onAdd={() => set('languages', [...data.languages, { name: '', proficiency: 'Professional' }])}>
+        {data.languages.length === 0 && <Empty text="No languages added yet." />}
+        <div className="space-y-3">
+          {data.languages.map((l, i) => (
+            <div key={i} className="flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 p-3">
+              <div className="min-w-40 flex-1">
+                <Label>Language</Label>
+                <input value={l.name} onChange={(e) => updateItem('languages', i, { name: e.target.value })} placeholder="English" className="mt-1 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none" />
+              </div>
+              <div>
+                <Label>Proficiency</Label>
+                <select value={l.proficiency ?? 'Professional'} onChange={(e) => updateItem('languages', i, { proficiency: e.target.value })} className="mt-1 rounded-2xl border border-slate-200 px-3 py-2 text-sm">
+                  {['Native', 'Fluent', 'Professional', 'Conversational', 'Basic'].map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <button onClick={() => set('languages', data.languages.filter((_, j) => j !== i))} className="grid h-9 w-9 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Remove language">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 
-  function updateItem<K extends 'experiences' | 'educations' | 'projects'>(key: K, index: number, patch: Partial<ProfileData[K][number]>) {
+  function updateItem<K extends 'experiences' | 'educations' | 'projects' | 'certifications' | 'languages'>(key: K, index: number, patch: Partial<ProfileData[K][number]>) {
     setData((d) => ({
       ...d,
       [key]: (d[key] as ProfileData[K]).map((item, i) => (i === index ? { ...item, ...patch } : item)),
@@ -268,6 +368,73 @@ export function ProfilePage() {
 
 function splitLines(value: string): string[] {
   return value.split('\n').map((l) => l.trim()).filter(Boolean);
+}
+
+interface ResumeRow {
+  id: number;
+  label: string;
+  parse_status: string;
+  is_master: boolean;
+  created_at: string;
+}
+
+function ResumesSection() {
+  const [items, setItems] = useState<ResumeRow[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const refresh = () => Resumes.list().then((d) => setItems(d.results ?? d)).catch(() => undefined);
+  useEffect(() => { refresh(); }, []);
+
+  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!e.target.files?.[0]) return;
+    setBusy(true); setErr('');
+    try {
+      await Resumes.upload(e.target.files[0]);
+      await refresh();
+    } catch {
+      setErr('Upload failed. Use a PDF or DOCX under a few MB.');
+    } finally {
+      setBusy(false);
+      e.target.value = '';
+    }
+  }
+  async function remove(id: number) {
+    await Resumes.remove(id);
+    setItems((rows) => rows.filter((r) => r.id !== id));
+  }
+
+  return (
+    <Card icon={FileText} title="Resumes">
+      <p className="mb-3 text-sm text-slate-500">
+        Upload your master resume — it powers match scoring and one-click tailoring for each job.
+      </p>
+      <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm font-bold text-slate-700 hover:bg-slate-100">
+        <UploadCloud className="h-5 w-5 text-slate-400" />
+        <span>{busy ? 'Uploading…' : 'Upload PDF or DOCX'}</span>
+        <input className="hidden" type="file" accept=".pdf,.docx" onChange={onUpload} disabled={busy} />
+      </label>
+      {err && <p className="mt-2 text-sm font-semibold text-red-600">{err}</p>}
+      {items.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {items.map((r) => (
+            <li key={r.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 p-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-black text-slate-900">{r.label}</p>
+                <p className="mt-0.5 text-xs font-semibold text-slate-500">
+                  {r.parse_status === 'done' ? 'Parsed' : r.parse_status}
+                  {r.is_master && <span className="ml-2 rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-black text-teal-700">Master</span>}
+                </p>
+              </div>
+              <button onClick={() => remove(r.id)} className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Delete resume">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
 }
 
 function Card({ icon: Icon, title, children, onAdd }: { icon: typeof User2; title: string; children: React.ReactNode; onAdd?: () => void }) {

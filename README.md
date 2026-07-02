@@ -11,15 +11,17 @@ Patterned on the AIAAS Django/Channels/Celery + React/Zustand stack and Faultlin
 | Area | What ships | Status |
 |---|---|---|
 | **Discovery** | Unified ingestion from aggregator APIs (Adzuna, Jooble, JSearch), ATS APIs (Greenhouse, Lever), JobSpy-wrapped big boards, email forwards, and one-click extension capture from any careers page | Adapters live; JobSpy + capture planned (Phase 2) |
-| **Ghost-Job Shield** | Repost fingerprinting, staleness tracking, missing-salary heuristics → ghost-risk score on every job card; auto-apply deprioritizes high-risk postings | Planned (Phase 2 flagship) |
-| **Matching** | Lexical + skill-overlap resume↔JD scoring; already emits a missing-skill `gaps` list, with richer matched/missing-keyword explanation, UI rendering, and a direct feed into tailoring planned | Scoring + gaps live; full explainability planned |
-| **Tailoring** | Per-JD resume + cover-letter generation with audit-trail diffs and a deterministic truthfulness verification pass (identity fields and claimed skills must match the profile — fails closed) | Generation live; verification pass planned |
-| **ATS-safe export** | JSON resume schema → single-column server-rendered templates → round-trip parse test | Planned (Phase 2) |
+| **Ghost-Job Shield** | Repost fingerprinting, staleness tracking, missing-salary heuristics → ghost-risk score on every job card; auto-apply deprioritizes high-risk postings | Live |
+| **Matching** | Lexical + skill-overlap resume↔JD scoring; emits a missing-skill `gaps` list plus a colour-coded matched/missing-keyword explanation rendered on job detail | Live (scoring, gaps, explainability) |
+| **Tailoring** | Per-JD resume + cover-letter generation with audit-trail diffs and a deterministic truthfulness verification pass (identity fields and claimed skills must match the profile — fails closed) | Live |
+| **ATS-safe export** | StructuredProfile → single-column, table-free `.txt`/`.docx` rendered server-side from one shared builder so the formats never diverge | Live |
 | **Tiered apply** | `assist` (human submits) → `autofill` (extension fills, never overwrites user input) → `autonomous` (agent submits, hard-gated on a per-application approval token) | Live |
-| **Tracking & analytics** | Applications Kanban + outcome-first dashboard: response rate per resume variant, time-to-first-interview, stage conversion — never "applications sent" as the headline | Kanban live; analytics planned |
+| **Tracking & analytics** | Applications Kanban (four pipeline tabs) + Todos + Goals + outcome-first dashboard: response rate, funnel conversion, time-to-first-response — never "applications sent" as the headline | Live |
+| **Networking** | Contacts linked to companies, a per-company hub (connections, open roles, your applications, editable careers page, warm-intro ranking), referral suggestions, outreach draft→approve, and an interactive drag-and-build network graph | Live |
 | **Interview Grill Agent** | Company-researched question banks, live grilling rounds with STAR-rubric evaluation, persisted post-session reports + study plans; voice mode in Phase 3. Preparation only — no live-interview copilot | Text mode live |
+| **Notifications** | Saved-search + application-event alerts delivered as an in-app activity feed and browser web-push (VAPID), with a unified notification bell | Live |
 | **Stealth mode** | Employer domains filtered from every list endpoint at the query level | Live |
-| **Trust** | Encrypted credentials vault, HITL hard-gate on submission (test-enforced), BYOK/local-model option, honest billing (self-serve cancel, rolling credits) | Vault + gate live; billing planned |
+| **Trust & billing** | Encrypted credentials vault, HITL hard-gate on submission (test-enforced), BYOK/local-model option, and a credit ledger that charges before expensive LLM work with a signup bonus (Stripe checkout still planned) | Live; Stripe checkout planned |
 
 How these choices position us against AIHawk, JobSpy, Resume-Matcher, Reactive-Resume, ApplyPilot, Teal/Huntr/Simplify/Careerflow, and Final Round AI — and the user-reported shortcomings of each we engineer against — is documented in [docs/competitive-landscape.md](docs/competitive-landscape.md).
 
@@ -33,8 +35,12 @@ How these choices position us against AIHawk, JobSpy, Resume-Matcher, Reactive-R
 | [docs/agent.md](docs/agent.md) | You're touching anything LLM-facing or the autonomous-apply path. |
 | [docs/job-search-skills-workflows-plan.md](docs/job-search-skills-workflows-plan.md) | You want the built-in job search, referral, outreach, and apply-agent workflow plan. |
 | [docs/data-model.md](docs/data-model.md) | You're adding fields, relations, or migrations. |
+| [docs/networking.md](docs/networking.md) | You're touching contacts, the company hub, referrals/outreach, or the network graph. |
+| [docs/billing.md](docs/billing.md) | You're spending credits or wiring a new paid action. |
+| [docs/notifications.md](docs/notifications.md) | You're touching alerts, the activity feed, or web push (incl. VAPID setup). |
 | [docs/adapters.md](docs/adapters.md) | You're wiring a new job-discovery source. |
 | [docs/development.md](docs/development.md) | You want to run it locally and know which env keys matter. |
+| [docs/deployment.md](docs/deployment.md) | You're (re)deploying the live testing box or a backend change isn't showing up. |
 | [docs/testing.md](docs/testing.md) | You're writing tests (you are, right?). |
 | [docs/implementation-plan.md](docs/implementation-plan.md) | You want the phased roadmap and the AIAAS/Faultline copy-map. |
 | [docs/drop-faiss-and-add-google-auth.md](docs/drop-faiss-and-add-google-auth.md) | Background on why we're dropping the embedder and how Google OAuth landed. |
@@ -106,21 +112,21 @@ Every app ships unit tests in `<app>/tests/test_*.py`. Full policy: [docs/testin
 | [`matching`](backend/matching/) | Resume↔JD scorer (lexical + skill-overlap; LLM rerank optional) + MatchScore |
 | [`notifications`](backend/notifications/) | Subscription DSL, Alert, web-push, Channels |
 | [`applications`](backend/applications/) | Application + AutoApplySession (approval token) + ApplicationEvent |
-| [`networking`](backend/networking/) | Contacts, referral opportunities, outreach drafts, consent events, action queue |
+| [`networking`](backend/networking/) | Contacts (company-linked), per-company hub, contact/company relationships + employments, interactive network graph, referral opportunities, outreach drafts, consent events, action queue |
 | [`tailoring`](backend/tailoring/) | TailoredResume + CoverLetter generators (LLM-injectable) |
 | [`agent`](backend/agent/) | LangGraph orchestrator + phase-gated tool registry + HITL gates. See [docs/agent.md](docs/agent.md). |
 | [`interview`](backend/interview/) | **Interview Grill Chat Agent** — research → question bank → live grilling → report + study plan |
 | [`credentials`](backend/credentials/) | AES-GCM encrypted vault for provider keys |
 | [`extension_api`](backend/extension_api/) | Endpoints consumed by the MV3 extension |
 | [`vault`](backend/vault/) | Faultline-style AuthFlow per portal (Phase 3) |
-| [`billing`](backend/billing/) | Stripe + credit ledger |
+| [`billing`](backend/billing/) | Credit ledger + enforcement (charge-before-work, signup bonus); Stripe checkout planned |
 | [`streaming`](backend/streaming/) | Channels WebSocket consumers (notifications, interview) |
 | [`ai`](backend/ai/) | Shared LLM provider transports (NVIDIA, CLI delegates, fallback) injected as `llm=` callables |
 
 ## Phases
 
 - **Phase 1 (MVP) - implemented beyond scaffold.** Auth, Google OAuth, API tokens, profile onboarding updates, profile readiness, resume upload/parse, deterministic skill extraction, Adzuna + Greenhouse ingestion, match scoring, real dashboard stats, applications Kanban with job details, tailoring, cover letters, notification subscriptions, credits ledger, and Interview Grill text mode are wired.
-- **Phase 2 - partially implemented.** Apply workflow now supports distinct `assist`, `autofill`, and `autonomous` preparation paths with application events and HITL approval-token issuance. Job detail can generate and display tailored resume + cover letter materials. Network graph supports manual contact seeding. Browser extension APIs and parsers exist, but the full install/autofill/submit workflow still needs end-to-end validation.
+- **Phase 2 - largely implemented.** Apply workflow supports distinct `assist`, `autofill`, and `autonomous` preparation paths with application events and HITL approval-token issuance. Job detail generates and displays tailored resume + cover-letter materials with ATS-safe export. Ghost-Job Shield, match explainability, and response analytics are live. The networking suite (company-linked contacts, per-company hub, referrals, outreach draft→approve, action queue, and an interactive drag-and-build graph) is live. Credit billing with enforcement and web-push notifications ship; only Stripe checkout remains. Browser extension APIs and parsers exist, but the full install/autofill/submit workflow still needs end-to-end validation.
 - **Phase 3 - pending.** Server-side Playwright autonomous submit, portal AuthFlows, LinkedIn integration, salary intelligence, voice interview mode, Stripe checkout/webhooks, and advanced analytics are not complete.
 
 Latest verification after the staged functionality pass:

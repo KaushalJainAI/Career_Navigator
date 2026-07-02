@@ -24,10 +24,14 @@ class Subscription(models.Model):
 
 class WebPushDevice(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='push_devices')
-    endpoint = models.URLField()
+    endpoint = models.URLField(max_length=1000)
     auth = models.CharField(max_length=255)
     p256dh = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # One row per browser subscription; re-registering updates it in place.
+        unique_together = [('user', 'endpoint')]
 
 
 class Alert(models.Model):

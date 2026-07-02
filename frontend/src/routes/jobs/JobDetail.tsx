@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { CheckCircle2, ExternalLink, ShieldCheck } from 'lucide-react';
 import { Jobs, Applications, Tailoring } from '../../api/endpoints';
 import { GhostRiskBadge, type GhostBand } from '../../components/GhostRiskBadge';
+import { CreditCost, CreditWall, insufficientCredits, type CreditShortfall } from '../../components/Credits';
+import { useBillingStore } from '../../stores/useBillingStore';
 
 interface Job {
   id: number;
@@ -54,6 +56,9 @@ export function JobDetail() {
   const [busyTier, setBusyTier] = useState<ApplyTier | null>(null);
   const [materials, setMaterials] = useState<GeneratedMaterials>({});
   const [materialsBusy, setMaterialsBusy] = useState(false);
+  const [creditWall, setCreditWall] = useState<CreditShortfall | null>(null);
+  const cost = useBillingStore((s) => s.costByReason);
+  const refreshBalance = useBillingStore((s) => s.refresh);
 
   useEffect(() => {
     Jobs.detail(jobId).then(setJob);
@@ -62,10 +67,15 @@ export function JobDetail() {
 
   async function apply(tier: ApplyTier) {
     setBusyTier(tier);
+    setCreditWall(null);
     try {
       const result = await Applications.prepare(jobId, tier);
       setPrepared(result);
       setMaterials({});
+      if (tier === 'autonomous') refreshBalance();
+    } catch (e) {
+      const short = insufficientCredits(e);
+      if (short) setCreditWall(short);
     } finally {
       setBusyTier(null);
     }
@@ -74,12 +84,17 @@ export function JobDetail() {
   async function generateMaterials() {
     if (!prepared) return;
     setMaterialsBusy(true);
+    setCreditWall(null);
     try {
       const [resume, coverLetter] = await Promise.all([
         Tailoring.resume(prepared.application.id),
         Tailoring.coverLetter(prepared.application.id),
       ]);
       setMaterials({ resume, coverLetter });
+      refreshBalance();
+    } catch (e) {
+      const short = insufficientCredits(e);
+      if (short) setCreditWall(short);
     } finally {
       setMaterialsBusy(false);
     }
@@ -151,10 +166,13 @@ export function JobDetail() {
         <button className="rounded-xl bg-teal-600 px-4 py-3 font-bold text-white disabled:opacity-60" disabled={!!busyTier} onClick={() => apply('autofill')}>
           {busyTier === 'autofill' ? 'Preparing...' : 'Autofill handoff'}
         </button>
-        <button className="rounded-xl bg-red-600 px-4 py-3 font-bold text-white disabled:opacity-60" disabled={!!busyTier} onClick={() => apply('autonomous')}>
+        <span className="inline-flex items-center px-1 text-xs font-black text-slate-400">Assist &amp; autofill are free</span>
+        <button className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-3 font-bold text-white disabled:opacity-60" disabled={!!busyTier} onClick={() => apply('autonomous')}>
           {busyTier === 'autonomous' ? 'Preparing...' : 'Autonomous review'}
+          {cost.autonomous_apply ? <CreditCost cost={cost.autonomous_apply} className="!bg-white/20 !text-white" /> : null}
         </button>
       </div>
+      {creditWall && <CreditWall info={creditWall} />}
       {prepared && (
         <div className="rounded-2xl border border-teal-100 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex items-start gap-3">
@@ -181,6 +199,9 @@ export function JobDetail() {
           <div className="mt-4 flex flex-wrap gap-2">
             <button className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60" disabled={materialsBusy} onClick={generateMaterials}>
               {materialsBusy ? 'Generating...' : 'Generate materials'}
+              {(cost.tailor_resume || cost.cover_letter) ? (
+                <CreditCost cost={(cost.tailor_resume ?? 0) + (cost.cover_letter ?? 0)} className="!bg-white/20 !text-white" />
+              ) : null}
             </button>
             <button className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 hover:bg-slate-50" onClick={() => downloadResume('txt')}>
               ATS resume .txt

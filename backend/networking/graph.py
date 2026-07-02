@@ -197,6 +197,12 @@ def neighborhood(*, user, root_kind: str, root_id: int, depth: int = 1) -> dict:
         for c in contacts:
             if add_node(_contact_node(c)):
                 add_edge(f'user:{u.id}', f'contact:{c.id}', 'knows')
+                # Surface the contact's direct company FK even at depth 1 so the
+                # default graph shows where people work, not just who you know.
+                if c.company_id:
+                    if add_node(_company_node(c.company)):
+                        add_edge(f'contact:{c.id}', f'company:{c.company_id}',
+                                 c.title or 'works at', 'employment')
                 if current_depth - 1 > 0:
                     expand_contact(c, current_depth - 1)
 

@@ -88,3 +88,20 @@ def test_profile_readiness_reports_missing_and_ready(auth_client):
     )
     assert resp.status_code == 200
     assert resp.data['readiness']['ready'] is True
+
+
+def test_profile_patch_certifications_and_languages(auth_client):
+    payload = {
+        'certifications': [
+            {'name': 'AWS Solutions Architect', 'issuer': 'Amazon', 'issue_date': '2024',
+             'credential_url': 'https://example.com/cert'},
+        ],
+        'languages': [
+            {'name': 'English', 'proficiency': 'Native'},
+            {'name': 'Hindi', 'proficiency': 'Fluent'},
+        ],
+    }
+    resp = auth_client.patch(reverse('profile-detail'), payload, format='json')
+    assert resp.status_code == 200
+    assert resp.data['certifications'][0]['name'] == 'AWS Solutions Architect'
+    assert {l['name'] for l in resp.data['languages']} == {'English', 'Hindi'}

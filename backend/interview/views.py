@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ai.providers import get_configured_llm
+from billing.services import charge
 from .grilling import (
     evaluate_answer,
     generate_question_bank,
@@ -32,6 +33,8 @@ class SessionListCreateView(generics.ListCreateAPIView):
         return InterviewSession.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
+        # A grill session runs company research + a full question bank (paid LLM work).
+        charge(self.request.user, 'mock_interview')
         session = serializer.save(user=self.request.user)
         company_name = session.company.name if session.company else session.research.get('company', '')
         llm = get_configured_llm()

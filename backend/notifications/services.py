@@ -6,7 +6,8 @@ from django.core.mail import send_mail
 from streaming.broadcaster import push_to_user
 
 from .filters import match_filter
-from .models import Alert, Channel, Subscription
+from .models import Alert, Channel, Subscription, WebPushDevice
+from .webpush import send_web_push
 
 
 def deliver_job_alert(job) -> list[Alert]:
@@ -41,6 +42,7 @@ def _deliver_channel(alert: Alert) -> None:
         'company': alert.job.company.name if alert.job.company_id else '',
         'job_id': alert.job_id,
     }
+    # In-app realtime nudge for every channel (cheap, same-origin websocket).
     push_to_user(alert.user_id, payload)
     if alert.channel == Channel.EMAIL and alert.user.email:
         send_mail(
@@ -55,3 +57,17 @@ def _deliver_channel(alert: Alert) -> None:
             [alert.user.email],
             fail_silently=True,
         )
+    elif alert.channel == Channel.WEBPUSH:
+        _deliver_web_push(alert, payload)
+
+
+def _deliver_web_push(alert: Alert, payload: dict) -> None:
+    """Fan a job-alert push out to every browser the user has subscribed."""
+    push_payload = {
+        'title': f'New match: {alert.job.title}',
+        'body': f'{payload["company"] or "New role"} · open to review and apply',
+        'url': f'/jobs/{alert.job_id}',
+        'tag': f'job-{alert.job_id}',
+    }
+    for device in WebPushDevice.objects.filter(user_id=alert.user_id):
+        send_web_push(device, push_payload)

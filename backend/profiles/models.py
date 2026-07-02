@@ -66,6 +66,23 @@ class Project(models.Model):
     tech_stack = models.JSONField(default=list, blank=True)
 
 
+class Certification(models.Model):
+    profile = models.ForeignKey(StructuredProfile, on_delete=models.CASCADE, related_name='certifications')
+    name = models.CharField(max_length=255)
+    issuer = models.CharField(max_length=255, blank=True)
+    issue_date = models.CharField(max_length=32, blank=True)  # free text, e.g. "Mar 2024"
+    credential_url = models.URLField(blank=True)
+
+
+class Language(models.Model):
+    profile = models.ForeignKey(StructuredProfile, on_delete=models.CASCADE, related_name='languages')
+    name = models.CharField(max_length=128)
+    proficiency = models.CharField(max_length=64, blank=True)  # Native / Fluent / Professional / Basic
+
+    class Meta:
+        unique_together = [('profile', 'name')]
+
+
 class Preference(models.Model):
     """Search preferences driving alerts and matching."""
 

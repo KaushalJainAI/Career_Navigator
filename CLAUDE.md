@@ -1,5 +1,32 @@
 # CLAUDE.md
 
+## Python Environment (EC2)
+
+**Do not create a project-level venv.** All Python backends on this machine share a single venv:
+
+```bash
+source ~/.venvs/shared/bin/activate
+```
+
+This venv contains the merged dependencies of AIAAS, Faultline, NGU, Career Navigator, and FitGenius — installed via `uv` for fast resolution and disk deduplication. It lives at `~/.venvs/shared/`.
+
+To install a new package:
+```bash
+source ~/.venvs/shared/bin/activate
+uv pip install <package>
+```
+
+To check installed packages:
+```bash
+source ~/.venvs/shared/bin/activate
+uv pip list
+```
+
+> On Windows (local dev) you still use per-project venvs as normal. The shared venv is EC2-only.
+
+---
+
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Repo at a glance

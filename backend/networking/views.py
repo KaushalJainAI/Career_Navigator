@@ -247,3 +247,32 @@ class WarmIntrosView(APIView):
         )
         return Response({'company': {'id': company.id, 'name': company.name},
                          'results': results})
+
+
+class CompanyHubListView(APIView):
+    """Every company the user has a contact, employment or application at."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .company_hub import company_list
+        return Response({'results': company_list(request.user)})
+
+
+class CompanyHubDetailView(APIView):
+    """A single company hub: connections, opportunities, applications, intros.
+    PATCH updates the careers page URL / description (shared company record)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk: int):
+        from .company_hub import company_detail
+        company = get_object_or_404(Company, pk=pk)
+        return Response(company_detail(request.user, company))
+
+    def patch(self, request, pk: int):
+        from .company_hub import company_detail
+        company = get_object_or_404(Company, pk=pk)
+        for field in ('careers_url', 'description'):
+            if field in request.data:
+                setattr(company, field, request.data[field] or '')
+        company.save(update_fields=['careers_url', 'description'])
+        return Response(company_detail(request.user, company))

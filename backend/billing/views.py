@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from django.db.models import Sum
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
@@ -5,20 +7,53 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import CreditLedger
+from .pricing import CATALOG, SIGNUP_BONUS
 from .serializers import CreditLedgerSerializer
+from .services import balance as credit_balance
 
 
 class BillingSummaryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        balance = CreditLedger.objects.filter(user=request.user).aggregate(total=Sum('delta'))['total'] or 0
-        latest = CreditLedger.objects.filter(user=request.user)[:5]
+        rows = CreditLedger.objects.filter(user=request.user)
+        balance = credit_balance(request.user)
+        spent = -(rows.filter(delta__lt=0).aggregate(t=Sum('delta'))['t'] or 0)
+        earned = rows.filter(delta__gt=0).aggregate(t=Sum('delta'))['t'] or 0
+
+        by_reason = defaultdict(int)
+        for reason, delta in rows.values_list('reason', 'delta'):
+            if delta < 0:
+                by_reason[reason] += -delta
+
         return Response({
             'balance': balance,
             'currency': 'credits',
-            'latest': CreditLedgerSerializer(latest, many=True).data,
+            'spent_total': spent,
+            'earned_total': earned,
+            'spent_by_reason': dict(by_reason),
+            'latest': CreditLedgerSerializer(rows[:5], many=True).data,
+            'signup_bonus': SIGNUP_BONUS,
+            'pricing': CATALOG,
+            # Rolling credits, no subscription to cancel — nothing to bill until
+            # Stripe lands, so there is never a surprise charge.
             'stripe_enabled': False,
+            'credits_never_expire': True,
+        })
+
+
+class PricingView(APIView):
+    """Price list so the UI can show what each action costs before the user
+    spends. Auth-only to keep it same-origin; reveals no user data."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({
+            'signup_bonus': SIGNUP_BONUS,
+            'currency': 'credits',
+            'credits_never_expire': True,
+            'items': CATALOG,
         })
 
 

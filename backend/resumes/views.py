@@ -15,7 +15,10 @@ class ResumeListCreateView(generics.ListCreateAPIView):
         return Resume.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        resume = serializer.save(user=self.request.user)
+        # First resume (or first when none is master yet) becomes the master, so
+        # match scoring and tailoring have something to work with immediately.
+        has_master = Resume.objects.filter(user=self.request.user, is_master=True).exists()
+        resume = serializer.save(user=self.request.user, is_master=not has_master)
         try:
             resume.file.open('rb')
             text = extract_text(resume.file, resume.file.name)

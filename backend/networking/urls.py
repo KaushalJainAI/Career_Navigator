@@ -2,6 +2,8 @@ from django.urls import path
 
 from .views import (
     ActionQueueListView,
+    CompanyHubDetailView,
+    CompanyHubListView,
     CompanyRelationshipListCreateView,
     ContactDetailView,
     ContactEmploymentDetailView,
@@ -27,6 +29,8 @@ urlpatterns = [
          name='contact-relationships'),
     path('employments/<int:pk>/', ContactEmploymentDetailView.as_view(), name='employment-detail'),
     path('relationships/<int:pk>/', ContactRelationshipDetailView.as_view(), name='relationship-detail'),
+    path('companies/', CompanyHubListView.as_view(), name='company-hub-list'),
+    path('companies/<int:pk>/', CompanyHubDetailView.as_view(), name='company-hub-detail'),
     path('companies/<int:pk>/relationships/', CompanyRelationshipListCreateView.as_view(),
          name='company-relationships'),
     path('graph/', GraphNeighborhoodView.as_view(), name='network-graph'),

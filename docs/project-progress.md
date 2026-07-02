@@ -1,6 +1,6 @@
 # Project Progress
 
-Last updated: 2026-06-10 (status re-verified directly against the code and a full local test run)
+Last updated: 2026-07-02 (status re-verified directly against the code and a full local test run — 225 backend tests passing)
 
 This file summarizes the current state of Career Navigator from the repository structure, README, and implementation docs.
 
@@ -8,9 +8,24 @@ This file summarizes the current state of Career Navigator from the repository s
 
 Career Navigator is past the initial scaffold. The core Django backend, React frontend, browser extension shell, infrastructure files, and documentation are all present. Phase 1 is implemented beyond scaffold, Phase 2 is partially implemented, and Phase 3 is still mostly pending.
 
-**Critical repo-state note (verified 2026-06-10):** `origin/main` is still at commit `184274a` — every recent feature (CI workflow, E2E tests, extension autofill bridge, onboarding agent, billing/tailoring/profile test suites, this doc) exists only as uncommitted local changes (~40 modified + ~25 untracked files). GitHub Actions CI has therefore never run. Committing and pushing is the single highest-priority action.
+**Critical repo-state note (verified 2026-07-02):** all recent work lives on the local `agent` branch and remains **uncommitted** (~110+ modified/untracked files). Per the device rule, commits happen only on `agent` (never merged to `main`) and only when explicitly requested, so `origin/main` is still far behind and GitHub Actions CI has not run on any of it. Committing `agent` and opening a PR to `main` remains the single highest-priority housekeeping action. The live deployment at `testing.kaushaljain.com` is served straight from the working tree (see [development.md](development.md)), so "shipped" below means live there, not merged.
 
 ## Recently Completed
+
+- Networking, company hub & interactive graph (2026-07-02):
+  - **Company hub** — a cross-app read model (`networking/company_hub.py`, no new tables) joining each `Company` to the user's contacts, open `JobPosting`s, and applications. `GET /networking/companies/` lists every company you have a contact/employment/application at with counts; `GET/PATCH /networking/companies/<id>/` returns the full hub (connections, opportunities, applications, warm intros) and lets the user edit the shared `careers_url`/`description`. New frontend `/companies` list + `/companies/:id` detail pages (in the **More** menu). The company↔application link is *derived* (Application→JobPosting→Company), never a stored FK, so it can't drift.
+  - **Contact↔company surfaced** — the pre-existing `Contact.company` FK is now drawn in the graph at depth 1 and listed on every company hub.
+  - **Interactive network graph** — replaced the placeholder (type-grouped list + raw edge dump) with a dependency-free **SVG node-link diagram**: draggable nodes coloured by type, click-to-inspect, double-click-to-expand, and **GUI editing** — "Add person" (creates the company FK) and a Connect mode that clicks node→node to POST a `ContactRelationship` (person↔person) or `ContactEmployment` (person→company). `?root=company:X` centres the graph on a company.
+  - Verified live: 13 companies aggregated, detail counts correct, graph returns 11 company nodes / 24 edges; 225 backend tests pass.
+- Credit billing + web-push notifications (this cycle):
+  - Credit ledger (`billing`) charges **before** expensive LLM work (tailoring/interview/autonomous apply) so an out-of-credit user gets a clean `402 InsufficientCredits`, not half a service. A signup bonus is granted via a `post_save` signal so first-run flows and tests stay funded.
+  - Web push: VAPID keypair, service worker, subscribe/unsubscribe endpoints; alerts fan out to in-app + email + browser push. Both `.env`s hold the real VAPID keys (gitignored).
+- Application-tracking overhaul: four-tab pipeline Kanban (to-apply / applied / interviewing / outcome), a **Todos** feature and a **Goals** feature (live progress computed from the pipeline in `applications/goals.py`), editable per-application `next_action`/`follow_up_on`, and a `seed_demo` command that populates a realistic demo dataset (jobs, contacts, referrals, outreach, actions, alerts) for any `--email`.
+- Networking frontend: tabbed Connections hub (Contacts / Referrals / Outreach / Next actions) surfacing the referral, outreach draft→approve, and action-queue endpoints that previously had no UI.
+- Profile & settings decoupled into separate pages; profile expanded (Certifications + Languages models added); **dark mode** via a `class`-based Tailwind toggle + `html.dark` overrides and a persisted theme store.
+- Unified **notification bell**: an activity feed (`notifications/activity.py`) merging alerts with application events; centred, on-screen dropdown on mobile.
+- UX pass: marketing-led dashboard (hero + trust strip + live pipeline snapshot + "how it works"), CSS-only motion layer gated behind `prefers-reduced-motion`, a **More** menu for secondary pages, and a mobile card-density pass (compact 2-up cards on phones, full cards at `sm:`).
+- Documentation: refreshed README (feature statuses, networking/notifications rows, phase note) and added four reference docs — [networking.md](networking.md), [billing.md](billing.md), [notifications.md](notifications.md), and [deployment.md](deployment.md) (the live `switch`/EC2 box, including the `--noreload` backend-restart gotcha).
 
 - Created this project progress tracker.
 - Portal automation app (`portals`) — browser-driven, no-API scraping foundation shipped (2026-06-12):

@@ -43,8 +43,9 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
         currentIndex: 0,
         loading: false,
       });
-    } catch {
+    } catch (e) {
       set({ loading: false });
+      throw e;  // let the caller surface e.g. an insufficient-credits (402)
     }
   },
   answer: async (text) => {

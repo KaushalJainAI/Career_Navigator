@@ -1,41 +1,103 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Account, Notifications, Profile } from '../../api/endpoints';
+import { Account, Notifications } from '../../api/endpoints';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { Auth } from '../../api/endpoints';
-import { UserCog, KeyRound, Target, EyeOff, ChevronRight, Save, Bell } from 'lucide-react';
-
-interface Preference {
-  target_titles: string[];
-  locations: string[];
-  keywords: string[];
-  exclude_companies: string[];
-  remote: boolean;
-  salary_min: number | null;
-  seniority: string;
-  work_auth: string;
-  stealth_mode: boolean;
-}
-
-const EMPTY_PREF: Preference = {
-  target_titles: [], locations: [], keywords: [], exclude_companies: [],
-  remote: true, salary_min: null, seniority: '', work_auth: '', stealth_mode: false,
-};
+import { UserCog, KeyRound, EyeOff, ChevronRight, Save, Bell, BellRing, Monitor, Moon, Sun, LogOut } from 'lucide-react';
+import { disablePush, enablePush, isSubscribed, permissionState, pushSupported } from '../../lib/push';
+import { useThemeStore, type Theme } from '../../lib/theme';
 
 export function SettingsPage() {
   return (
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-black tracking-tight text-slate-950">Settings</h1>
-        <p className="mt-1 text-sm font-semibold text-slate-500">Manage your account, job preferences and privacy.</p>
+        <p className="mt-1 text-sm font-semibold text-slate-500">Your account, notifications, privacy and appearance. Career details live on your <a href="/profile" className="font-black text-slate-900 underline">profile</a>.</p>
       </header>
+      <AppearanceSection />
       <AccountSection />
-  <PasswordSection />
-  <PreferencesSection />
+      <PasswordSection />
+      <PushNotificationsSection />
       <AlertSubscriptionsSection />
-  <PrivacySection />
+      <PrivacySection />
       <LinksSection />
+      <SignOutSection />
     </div>
+  );
+}
+
+function PushNotificationsSection() {
+  const [supported] = useState(pushSupported());
+  const [subscribed, setSubscribed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<Status>(null);
+
+  useEffect(() => { isSubscribed().then(setSubscribed).catch(() => undefined); }, []);
+
+  async function turnOn() {
+    setBusy(true);
+    setStatus(null);
+    const result = await enablePush();
+    if (result.ok) {
+      setSubscribed(true);
+      setStatus({ kind: 'ok', text: 'Browser notifications are on — we\'ll ping this device on new matches.' });
+    } else {
+      const messages: Record<string, string> = {
+        unsupported: 'This browser does not support push notifications.',
+        denied: 'Notifications are blocked. Enable them in your browser site settings and retry.',
+        'server-disabled': 'Push is not configured on the server yet.',
+        error: 'Could not enable notifications. Please try again.',
+      };
+      setStatus({ kind: 'err', text: messages[result.reason] ?? 'Could not enable notifications.' });
+    }
+    setBusy(false);
+  }
+
+  async function turnOff() {
+    setBusy(true);
+    setStatus(null);
+    await disablePush();
+    setSubscribed(false);
+    setStatus({ kind: 'ok', text: 'Browser notifications turned off for this device.' });
+    setBusy(false);
+  }
+
+  const blocked = supported && permissionState() === 'denied';
+
+  return (
+    <Card icon={BellRing} title="Browser notifications">
+      <p className="mb-3 text-sm text-slate-500">
+        Get a desktop/phone notification the moment a job matches one of your alerts — even when
+        Career Navigator isn't open. Works per-device.
+      </p>
+      {!supported ? (
+        <p className="text-sm font-semibold text-amber-600">This browser doesn't support push notifications.</p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black ${subscribed ? 'bg-teal-50 text-teal-700' : 'bg-slate-100 text-slate-600'}`}>
+            <span className={`h-2 w-2 rounded-full ${subscribed ? 'bg-teal-500' : 'bg-slate-400'}`} />
+            {subscribed ? 'Enabled on this device' : 'Off'}
+          </span>
+          {subscribed ? (
+            <button onClick={turnOff} disabled={busy} className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+              {busy ? 'Working…' : 'Turn off'}
+            </button>
+          ) : (
+            <button onClick={turnOn} disabled={busy || blocked} className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-black text-white shadow-[0_4px_0_#2dd4bf] hover:bg-slate-800 disabled:opacity-60">
+              <BellRing className="h-4 w-4" /> {busy ? 'Enabling…' : 'Enable notifications'}
+            </button>
+          )}
+          {status && (
+            <span className={`text-sm font-semibold ${status.kind === 'ok' ? 'text-teal-600' : 'text-red-600'}`}>{status.text}</span>
+          )}
+        </div>
+      )}
+      {blocked && (
+        <p className="mt-2 text-xs font-semibold text-amber-600">
+          Notifications are blocked for this site — allow them in your browser's address-bar site settings, then reload.
+        </p>
+      )}
+    </Card>
   );
 }
 
@@ -47,14 +109,25 @@ interface AlertSubscription {
   enabled: boolean;
 }
 
+const CHANNEL_OPTIONS: { key: string; label: string }[] = [
+  { key: 'in_app', label: 'In-app' },
+  { key: 'webpush', label: 'Browser push' },
+  { key: 'email', label: 'Email' },
+];
+
 function AlertSubscriptionsSection() {
   const [items, setItems] = useState<AlertSubscription[]>([]);
   const [name, setName] = useState('Remote backend roles');
   const [keywords, setKeywords] = useState<string[]>([]);
   const [location, setLocation] = useState('');
   const [remote, setRemote] = useState(true);
+  const [channels, setChannels] = useState<string[]>(['in_app']);
   const [status, setStatus] = useState<Status>(null);
   const [saving, setSaving] = useState(false);
+
+  function toggleChannel(key: string) {
+    setChannels((c) => (c.includes(key) ? c.filter((x) => x !== key) : [...c, key]));
+  }
 
   useEffect(() => {
     Notifications.subscriptions()
@@ -69,7 +142,7 @@ function AlertSubscriptionsSection() {
       const created = await Notifications.createSubscription({
         name,
         filter_json: { keywords, location, remote },
-        channels: ['in_app'],
+        channels: channels.length ? channels : ['in_app'],
         enabled: true,
       });
       setItems((rows) => [created, ...rows]);
@@ -101,6 +174,22 @@ function AlertSubscriptionsSection() {
             <TagInput values={keywords} onChange={setKeywords} placeholder="e.g. Python" />
           </div>
           <Field label="Location" value={location} onChange={setLocation} placeholder="Remote, Bengaluru" />
+          <div>
+            <Label>Deliver via</Label>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {CHANNEL_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => toggleChannel(opt.key)}
+                  className={`rounded-full px-3 py-1 text-xs font-black transition ${channels.includes(opt.key) ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-slate-400">Browser push needs notifications enabled above.</p>
+          </div>
           <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
             <input type="checkbox" checked={remote} onChange={(e) => setRemote(e.target.checked)} />
             Remote only
@@ -225,64 +314,54 @@ function PasswordSection() {
   );
 }
 
-function PreferencesSection() {
-  const [pref, setPref] = useState<Preference>(EMPTY_PREF);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<Status>(null);
-
-  useEffect(() => {
-    Profile.get()
-      .then((d) => { if (d.preference) setPref({ ...EMPTY_PREF, ...d.preference }); })
-      .catch(() => setStatus({ kind: 'err', text: 'Could not load preferences.' }))
-      .finally(() => setLoading(false));
-  }, []);
-
-  function set<K extends keyof Preference>(key: K, value: Preference[K]) {
-    setPref((p) => ({ ...p, [key]: value }));
-  }
-
-  async function save() {
-    setSaving(true);
-    setStatus(null);
-    try {
-      await Profile.patch({ preference: pref });
-      setStatus({ kind: 'ok', text: 'Preferences saved.' });
-    } catch {
-      setStatus({ kind: 'err', text: 'Could not save preferences.' });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (loading) return <Card icon={Target} title="Job search preferences"><p className="text-sm text-slate-400">Loading…</p></Card>;
-
+function SignOutSection() {
+  const logout = useAuthStore((s) => s.logout);
   return (
-    <Card icon={Target} title="Job search preferences">
-      <div className="space-y-4">
+    <section className="rounded-3xl bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Label>Target titles</Label>
-          <TagInput values={pref.target_titles} onChange={(v) => set('target_titles', v)} placeholder="e.g. Backend Engineer" />
+          <h2 className="inline-flex items-center gap-2 text-sm font-black uppercase tracking-wide text-slate-500">
+            <LogOut className="h-4 w-4 text-slate-400" /> Session
+          </h2>
+          <p className="mt-1 text-sm font-semibold text-slate-500">Sign out of Career Navigator on this device.</p>
         </div>
-        <div>
-          <Label>Preferred locations</Label>
-          <TagInput values={pref.locations} onChange={(v) => set('locations', v)} placeholder="e.g. Remote, Bengaluru" />
-        </div>
-        <div>
-          <Label>Keywords</Label>
-          <TagInput values={pref.keywords} onChange={(v) => set('keywords', v)} placeholder="Skills/tech to match on" />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Minimum salary" type="number" value={pref.salary_min?.toString() ?? ''} onChange={(v) => set('salary_min', v ? Number(v) : null)} />
-          <Field label="Seniority" value={pref.seniority} onChange={(v) => set('seniority', v)} placeholder="e.g. senior" />
-          <Field label="Work authorization" value={pref.work_auth} onChange={(v) => set('work_auth', v)} placeholder="e.g. Citizen, H1B" />
-        </div>
-        <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
-          <input type="checkbox" checked={pref.remote} onChange={(e) => set('remote', e.target.checked)} />
-          Open to remote roles
-        </label>
+        <button
+          onClick={logout}
+          className="inline-flex items-center gap-2 rounded-2xl bg-red-50 px-4 py-2 text-sm font-black text-red-600 hover:bg-red-100"
+        >
+          <LogOut className="h-4 w-4" /> Sign out
+        </button>
       </div>
-      <SaveBar onSave={save} saving={saving} status={status} />
+    </section>
+  );
+}
+
+function AppearanceSection() {
+  const theme = useThemeStore((s) => s.theme);
+  const setTheme = useThemeStore((s) => s.setTheme);
+  const options: { value: Theme; label: string; icon: typeof Sun }[] = [
+    { value: 'light', label: 'Light', icon: Sun },
+    { value: 'dark', label: 'Dark', icon: Moon },
+    { value: 'system', label: 'System', icon: Monitor },
+  ];
+  return (
+    <Card icon={Moon} title="Appearance">
+      <p className="mb-3 text-sm text-slate-500">Choose how Career Navigator looks. “System” follows your device setting.</p>
+      <div className="inline-flex flex-wrap gap-2">
+        {options.map((o) => {
+          const Icon = o.icon;
+          const active = theme === o.value;
+          return (
+            <button
+              key={o.value}
+              onClick={() => setTheme(o.value)}
+              className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-black transition ${active ? 'bg-slate-950 text-white shadow-[0_4px_0_#2dd4bf]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              <Icon className="h-4 w-4" /> {o.label}
+            </button>
+          );
+        })}
+      </div>
     </Card>
   );
 }

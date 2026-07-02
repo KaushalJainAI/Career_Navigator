@@ -13,10 +13,30 @@ from .models import (
 
 
 class ContactSerializer(serializers.ModelSerializer):
+    # Read the linked company's name for display; accept a `company_name` on write
+    # and get_or_create the Company so the UI can just type a name.
+    company_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Contact
         fields = '__all__'
         read_only_fields = ['user', 'created_at', 'updated_at']
+
+    def get_company_name(self, obj):
+        return obj.company.name if obj.company_id else ''
+
+    def _apply_company(self, validated_data):
+        name = (self.initial_data.get('company_name') or '').strip() if hasattr(self, 'initial_data') else ''
+        if name:
+            from jobs.models import Company
+            validated_data['company'] = Company.objects.get_or_create(name=name)[0]
+        return validated_data
+
+    def create(self, validated_data):
+        return super().create(self._apply_company(validated_data))
+
+    def update(self, instance, validated_data):
+        return super().update(instance, self._apply_company(validated_data))
 
 
 class ReferralOpportunitySerializer(serializers.ModelSerializer):

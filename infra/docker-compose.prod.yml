@@ -1,0 +1,115 @@
+# Production stack — patterned on AIAAS/docker-compose.ec2.yml.
+#
+# Differences from the dev infra/docker-compose.yml:
+#   - backend runs config.settings.prod (DEBUG=False, WhiteNoise static)
+#   - frontend is the built nginx image, not the Vite dev server, and is the
+#     single public entrypoint (proxies /api + /ws to the backend)
+#   - every service has a healthcheck; startup ordering waits on healthy deps
+#   - secrets come from infra/.env (copy from infra/.env.prod.example)
+#
+# Bring up:  docker compose -f infra/docker-compose.prod.yml up -d --build
+# Logs:      docker compose -f infra/docker-compose.prod.yml logs -f backend
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-career_navigator}
+      POSTGRES_USER: ${POSTGRES_USER:-cn}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/.env}
+    volumes: ['pg_data:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-cn}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes: ['redis_data:/data']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../infra/backend.Dockerfile
+    env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DATABASE_URL: postgres://${POSTGRES_USER:-cn}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-career_navigator}
+      REDIS_URL: redis://redis:6379/0
+      USE_REDIS_CHANNEL_LAYER: 'True'
+      RUN_INGESTION_ASYNC: 'True'
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             daphne -b 0.0.0.0 -p 8000 config.asgi:application"
+    volumes: ['media_data:/app/media', 'static_data:/app/staticfiles']
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:8000/api/health/']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+  celery:
+    build:
+      context: ../backend
+      dockerfile: ../infra/backend.Dockerfile
+    env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DATABASE_URL: postgres://${POSTGRES_USER:-cn}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-career_navigator}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      backend: {condition: service_healthy}
+    command: celery -A config worker -l info
+    volumes: ['media_data:/app/media']
+    restart: unless-stopped
+
+  celery_beat:
+    build:
+      context: ../backend
+      dockerfile: ../infra/backend.Dockerfile
+    env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      DATABASE_URL: postgres://${POSTGRES_USER:-cn}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-career_navigator}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      backend: {condition: service_healthy}
+    command: celery -A config beat -l info -S django
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        # Relative URLs — nginx proxies them to the backend, so the bundle has
+        # no hard-coded host and works behind any domain.
+        VITE_API_URL: /api/v1
+        VITE_WS_URL: /ws
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        VITE_GOOGLE_REDIRECT_URI: ${VITE_GOOGLE_REDIRECT_URI:-}
+    depends_on:
+      backend: {condition: service_healthy}
+    ports: ['${PUBLIC_HTTP_PORT:-80}:80']
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  redis_data:
+  media_data:
+  static_data:
