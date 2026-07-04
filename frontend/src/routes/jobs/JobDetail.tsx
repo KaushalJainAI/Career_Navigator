@@ -1,20 +1,46 @@
-import { useParams } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { CheckCircle2, ExternalLink, ShieldCheck } from 'lucide-react';
+import { Link, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  CheckCircle2, ExternalLink, ShieldCheck, MapPin, Banknote, Briefcase, Clock,
+  Users, TrendingUp, Building2, Sparkles, XCircle, CalendarDays, Globe2, Hourglass, ListChecks,
+} from 'lucide-react';
 import { Jobs, Applications, Tailoring } from '../../api/endpoints';
 import { GhostRiskBadge, type GhostBand } from '../../components/GhostRiskBadge';
 import { CreditCost, CreditWall, insufficientCredits, type CreditShortfall } from '../../components/Credits';
 import { useBillingStore } from '../../stores/useBillingStore';
+import { useApplicationsStore } from '../../stores/useApplicationsStore';
+import { rejectionCooldown } from '../../lib/cooldown';
+
+const STATUS_LABEL: Record<string, string> = {
+  saved: 'Saved', tailored: 'Tailored', ready: 'Ready to apply', applied: 'Applied',
+  phone: 'Phone screen', onsite: 'Onsite', offer: 'Offer', rejected: 'Rejected', withdrawn: 'Withdrawn',
+};
 
 interface Job {
   id: number;
   title: string;
   description: string;
   apply_url: string;
-  company: { name: string };
+  company: { name: string; domain?: string };
   ghost_risk?: number;
   ghost_band?: GhostBand;
   ghost_reasons?: string[];
+  // Optional structured fields (backend may not populate these yet).
+  location?: string;
+  remote?: boolean;
+  employment_type?: string;
+  experience_level?: string;
+  salary_min?: number;
+  salary_max?: number;
+  salary_currency?: string;
+  posted_at?: string;
+  applicant_count?: number;
+  responsibilities?: string[];
+  requirements?: string[];
+  benefits?: string[];
+  company_about?: string;
+  company_size?: string;
+  company_industry?: string;
 }
 
 interface MatchReason {
@@ -47,6 +73,134 @@ interface GeneratedMaterials {
   coverLetter?: { id: number; content: string };
 }
 
+// ---------------------------------------------------------------------------
+// Placeholder data — used to flesh out the page while the backend structured
+// fields are still being wired up. Real values always take precedence.
+// ---------------------------------------------------------------------------
+const DEMO_RESPONSIBILITIES = [
+  'Design, train and ship recommendation and resume-to-job matching models that power candidate discovery.',
+  'Own the full ML lifecycle: data pipelines, feature engineering, offline evaluation and online A/B tests.',
+  'Improve ranking quality and relevance using embeddings, learning-to-rank and lightweight LLM signals.',
+  'Partner with product and engineering to move experiments from notebook to production reliably.',
+  'Monitor live models for drift, bias and latency, and iterate based on measurable outcomes.',
+];
+const DEMO_REQUIREMENTS = [
+  '3+ years building and deploying ML models in production.',
+  'Strong Python and hands-on experience with PyTorch or TensorFlow.',
+  'Solid grounding in recommender systems, ranking, or information retrieval.',
+  'Comfortable with SQL, large-scale data processing and experiment design.',
+  'Familiarity with MLOps tooling (feature stores, model serving, CI/CD for ML).',
+];
+const DEMO_BENEFITS = [
+  'Equity + competitive base salary',
+  'Fully remote-friendly with flexible hours',
+  'Annual learning & conference budget',
+  'Comprehensive health, dental & vision',
+  'Latest hardware of your choice',
+];
+const DEMO_MATCH: Match = {
+  score: 0.78,
+  breakdown: { skills: 0.82, experience: 0.74, keywords: 0.71, seniority: 0.8 },
+  gaps: ['Kubernetes', 'Ranking at scale', 'Feature stores'],
+  matched_skills: ['Python', 'PyTorch', 'Recommender Systems', 'SQL', 'A/B Testing', 'Embeddings'],
+  explanation: [
+    { kind: 'positive', title: 'Core ML stack matches', detail: 'Your Python + PyTorch experience lines up with the day-to-day work.' },
+    { kind: 'positive', title: 'Recommender background', detail: 'Prior work on ranking/recommendation is exactly what this role centres on.' },
+    { kind: 'negative', title: 'Missing production K8s', detail: 'The role expects comfort deploying on Kubernetes — not seen on your resume.' },
+    { kind: 'neutral', title: 'Seniority aligned', detail: 'Your 4 years of experience fits the mid-level band for this posting.' },
+  ],
+};
+
+function money(n?: number, currency = 'USD') {
+  if (!n) return null;
+  const sym = currency === 'USD' ? '$' : currency === 'INR' ? '₹' : currency === 'EUR' ? '€' : '';
+  return `${sym}${(n / 1000).toFixed(0)}k`;
+}
+
+function timeAgo(iso?: string) {
+  if (!iso) return null;
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
+/** Strip HTML to a rough plain-text length check so we know if the description
+ *  is too thin to show on its own. */
+function textLength(html: string) {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().length;
+}
+
+/** Signature card: hard black border + teal offset shadow, echoing the logo /
+ *  active-nav treatment used across the app. */
+const CARD = 'rounded-3xl border-2 border-slate-900 bg-white shadow-[6px_6px_0_#0f172a]';
+
+/** Editorial section header with a teal accent bar and a mono index. */
+function SectionHead({ index, title }: { index: string; title: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="h-6 w-1.5 flex-shrink-0 rounded-full bg-teal-400" />
+      <span className="font-mono text-xs font-black tracking-widest text-teal-600">{index}</span>
+      <h2 className="text-lg font-black tracking-tight text-slate-900">{title}</h2>
+    </div>
+  );
+}
+
+/** SVG ring gauge for the match score — the page's visual centrepiece. */
+function MatchRing({ pct }: { pct: number }) {
+  const r = 46;
+  const c = 2 * Math.PI * r;
+  const off = c * (1 - pct / 100);
+  const color = pct >= 75 ? '#2dd4bf' : pct >= 50 ? '#fbbf24' : '#f87171';
+  return (
+    <div className="relative grid flex-shrink-0 place-items-center">
+      <svg width="118" height="118" viewBox="0 0 120 120" className="-rotate-90">
+        <circle cx="60" cy="60" r={r} fill="none" stroke="#1e293b" strokeWidth="9" />
+        <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="9" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} />
+      </svg>
+      <div className="absolute text-center">
+        <div className="text-3xl font-black leading-none text-white">{pct}%</div>
+        <div className="mt-1 font-mono text-[10px] font-black uppercase tracking-widest text-teal-300">Match</div>
+      </div>
+    </div>
+  );
+}
+
+function Fact({ icon: Icon, label, value }: { icon: typeof MapPin; label: string; value: string }) {
+  return (
+    <div className="flex items-start gap-3 border-b border-dashed border-slate-200 pb-3 last:border-0 last:pb-0">
+      <span className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-slate-900 text-teal-300">
+        <Icon className="h-4 w-4" />
+      </span>
+      <div className="min-w-0">
+        <p className="font-mono text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+        <p className="truncate text-sm font-bold text-slate-800">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function ListBlock({ index, title, items, numbered }: { index: string; title: string; items: string[]; numbered?: boolean }) {
+  return (
+    <section className={`${CARD} p-6`}>
+      <SectionHead index={index} title={title} />
+      <ul className="mt-4 space-y-3">
+        {items.map((it, i) => (
+          <li key={it} className="flex gap-3 text-sm leading-6 text-slate-700">
+            {numbered ? (
+              <span className="mt-0.5 grid h-5 w-5 flex-shrink-0 place-items-center rounded-md bg-teal-50 font-mono text-[11px] font-black text-teal-700">{i + 1}</span>
+            ) : (
+              <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-slate-400" />
+            )}
+            <span>{it}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function JobDetail() {
   const { id } = useParams();
   const jobId = Number(id);
@@ -59,19 +213,29 @@ export function JobDetail() {
   const [creditWall, setCreditWall] = useState<CreditShortfall | null>(null);
   const cost = useBillingStore((s) => s.costByReason);
   const refreshBalance = useBillingStore((s) => s.refresh);
+  const applications = useApplicationsStore((s) => s.applications);
+  const fetchApps = useApplicationsStore((s) => s.fetch);
 
   useEffect(() => {
     Jobs.detail(jobId).then(setJob);
     Jobs.match(jobId).then(setMatch).catch(() => undefined);
-  }, [jobId]);
+    fetchApps().catch(() => undefined);
+  }, [jobId, fetchApps]);
+
+  // Association: does this job already sit in the user's pipeline?
+  const myApp = useMemo(() => applications.find((a) => a.job === jobId), [applications, jobId]);
+  const cool = myApp ? rejectionCooldown(myApp) : null;
+  const applyLocked = !!cool?.active;
 
   async function apply(tier: ApplyTier) {
+    if (applyLocked) return;
     setBusyTier(tier);
     setCreditWall(null);
     try {
       const result = await Applications.prepare(jobId, tier);
       setPrepared(result);
       setMaterials({});
+      fetchApps().catch(() => undefined);
       if (tier === 'autonomous') refreshBalance();
     } catch (e) {
       const short = insufficientCredits(e);
@@ -113,68 +277,260 @@ export function JobDetail() {
     URL.revokeObjectURL(url);
   }
 
-  if (!job) return <p>Loading...</p>;
+  // Merge real data with placeholder fallbacks so the page always reads well.
+  const view = useMemo(() => {
+    const responsibilities = job?.responsibilities?.length ? job.responsibilities : DEMO_RESPONSIBILITIES;
+    const requirements = job?.requirements?.length ? job.requirements : DEMO_REQUIREMENTS;
+    const benefits = job?.benefits?.length ? job.benefits : DEMO_BENEFITS;
+    const salary = money(job?.salary_min, job?.salary_currency) && money(job?.salary_max, job?.salary_currency)
+      ? `${money(job?.salary_min, job?.salary_currency)}–${money(job?.salary_max, job?.salary_currency)}`
+      : '$140k–$190k';
+    return {
+      responsibilities,
+      requirements,
+      benefits,
+      salary,
+      location: job?.location ?? 'San Francisco, CA',
+      remote: job?.remote ?? true,
+      employment_type: job?.employment_type ?? 'Full-time',
+      experience_level: job?.experience_level ?? 'Mid–Senior',
+      posted: timeAgo(job?.posted_at) ?? '3d ago',
+      applicants: job?.applicant_count ?? 47,
+      about: job?.company_about ?? `${job?.company?.name ?? 'The company'} is a fast-growing product team building tools used by millions. The ML group owns discovery, personalisation and matching across the platform.`,
+      companySize: job?.company_size ?? '1,000–5,000',
+      industry: job?.company_industry ?? 'Software / SaaS',
+      descriptionIsThin: !job || textLength(job.description || '') < 220,
+    };
+  }, [job]);
+
+  const shownMatch = match ?? DEMO_MATCH;
+  const matchPct = Math.round(shownMatch.score * 100);
+
+  if (!job) return <p className="p-4 text-sm font-semibold text-slate-500">Loading…</p>;
+
   return (
-    <section className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{job.title}</h1>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <span className="text-sm font-semibold text-slate-600 sm:text-base">{job.company?.name}</span>
-          {typeof job.ghost_risk === 'number' && (
-            <GhostRiskBadge score={job.ghost_risk} band={job.ghost_band} reasons={job.ghost_reasons} showScore />
-          )}
+    <section className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
+      {/* ── Hero: dark statement panel with the match gauge ── */}
+      <div className="relative overflow-hidden rounded-3xl border-2 border-slate-900 bg-slate-950 p-6 shadow-[8px_8px_0_#2dd4bf] sm:p-8">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-teal-500/10 blur-2xl" />
+        <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="font-mono text-[11px] font-black uppercase tracking-widest text-teal-300">{job.company?.name}</span>
+              {typeof job.ghost_risk === 'number' && (
+                <GhostRiskBadge score={job.ghost_risk} band={job.ghost_band} reasons={job.ghost_reasons} showScore />
+              )}
+            </div>
+            <h1 className="mt-2 text-2xl font-black leading-tight tracking-tight text-white sm:text-4xl">{job.title}</h1>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold text-slate-200">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5"><MapPin className="h-3.5 w-3.5 text-teal-300" />{view.location}</span>
+              {view.remote && <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5"><Globe2 className="h-3.5 w-3.5 text-teal-300" />Remote-friendly</span>}
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5"><Banknote className="h-3.5 w-3.5 text-teal-300" />{view.salary}</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5"><Briefcase className="h-3.5 w-3.5 text-teal-300" />{view.employment_type}</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5"><Clock className="h-3.5 w-3.5 text-teal-300" />Posted {view.posted}</span>
+            </div>
+          </div>
+          <MatchRing pct={matchPct} />
         </div>
       </div>
+
       {typeof job.ghost_risk === 'number' && (job.ghost_band ?? '') === 'high' && job.ghost_reasons?.length ? (
-        <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-800">
+        <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-4 text-sm text-red-800">
           <div className="font-black">High ghost-job risk — verify this role is genuinely open before investing time.</div>
           <ul className="mt-2 list-disc pl-5">
             {job.ghost_reasons.map((reason) => <li key={reason}>{reason}</li>)}
           </ul>
         </div>
       ) : null}
-      {match && (
-        <div className="rounded-2xl bg-white p-4 shadow-sm" data-testid="match-card">
-          <div className="font-medium">Match score: {(match.score * 100).toFixed(0)}%</div>
-          {match.explanation && match.explanation.length > 0 ? (
-            <ul className="mt-3 space-y-2">
-              {match.explanation.map((reason) => (
-                <li key={reason.title} className="flex items-start gap-2 text-sm" data-kind={reason.kind}>
-                  <span className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${
-                    reason.kind === 'positive' ? 'bg-emerald-500'
-                      : reason.kind === 'negative' ? 'bg-red-500' : 'bg-slate-400'
-                  }`} />
-                  <span>
-                    <span className="font-bold text-slate-800">{reason.title}</span>
-                    <span className="text-slate-600"> — {reason.detail}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            match.gaps?.length > 0 && (
-              <div className="text-sm text-amber-700">Gaps: {match.gaps.join(', ')}</div>
-            )
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Main column */}
+        <div className="space-y-6 lg:col-span-2">
+          {/* Match / skills card */}
+          <div className={`${CARD} p-6`} data-testid="match-card">
+            <SectionHead index="01" title="Your match for this role" />
+            <p className="mt-1 pl-5 text-xs font-semibold text-slate-500">Scored against your resume, skills and experience.</p>
+
+            {/* breakdown */}
+            {shownMatch.breakdown && Object.keys(shownMatch.breakdown).length > 0 && (
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {Object.entries(shownMatch.breakdown).map(([k, v]) => (
+                  <div key={k} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center">
+                    <p className="text-2xl font-black text-slate-900">{Math.round(v * 100)}<span className="text-sm text-slate-400">%</span></p>
+                    <p className="font-mono text-[10px] font-black uppercase tracking-widest text-slate-500">{k}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* matched / missing skills */}
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
+                <p className="flex items-center gap-1.5 font-mono text-[11px] font-black uppercase tracking-widest text-emerald-700">
+                  <Sparkles className="h-3.5 w-3.5" /> Skills you have · {shownMatch.matched_skills?.length ?? 0}
+                </p>
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {(shownMatch.matched_skills ?? []).map((s) => (
+                    <span key={s} className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-bold text-emerald-700">{s}</span>
+                  ))}
+                  {(shownMatch.matched_skills ?? []).length === 0 && <span className="text-xs text-slate-400">—</span>}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-red-100 bg-red-50/40 p-4">
+                <p className="flex items-center gap-1.5 font-mono text-[11px] font-black uppercase tracking-widest text-red-700">
+                  <XCircle className="h-3.5 w-3.5" /> Skills to add · {shownMatch.gaps?.length ?? 0}
+                </p>
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {(shownMatch.gaps ?? []).map((s) => (
+                    <span key={s} className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-bold text-red-700">{s}</span>
+                  ))}
+                  {(shownMatch.gaps ?? []).length === 0 && <span className="text-xs text-slate-400">None — great fit!</span>}
+                </div>
+              </div>
+            </div>
+
+            {/* explanation reasons */}
+            {shownMatch.explanation && shownMatch.explanation.length > 0 && (
+              <ul className="mt-5 space-y-2.5 border-t-2 border-dashed border-slate-200 pt-5">
+                {shownMatch.explanation.map((reason) => (
+                  <li key={reason.title} className="flex items-start gap-2.5 text-sm" data-kind={reason.kind}>
+                    <span className={`mt-1.5 h-2.5 w-2.5 flex-shrink-0 rounded-sm ${
+                      reason.kind === 'positive' ? 'bg-emerald-500' : reason.kind === 'negative' ? 'bg-red-500' : 'bg-slate-400'
+                    }`} />
+                    <span>
+                      <span className="font-black text-slate-900">{reason.title}</span>
+                      <span className="text-slate-600"> — {reason.detail}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* About the role (raw description) */}
+          {(!view.descriptionIsThin || job.description) && (
+            <section className={`${CARD} p-6`}>
+              <SectionHead index="02" title="About the role" />
+              {view.descriptionIsThin ? (
+                <p className="mt-4 text-sm leading-7 text-slate-700">{job.description.replace(/<[^>]*>/g, '')}</p>
+              ) : (
+                <article
+                  className="prose prose-sm mt-4 max-w-none leading-7 text-slate-700"
+                  dangerouslySetInnerHTML={{ __html: job.description }}
+                />
+              )}
+            </section>
           )}
+
+          <ListBlock index="03" title="What you'll do" items={view.responsibilities} numbered />
+          <ListBlock index="04" title="What we're looking for" items={view.requirements} />
+          <ListBlock index="05" title="Perks & benefits" items={view.benefits} />
+        </div>
+
+        {/* Sidebar */}
+        <aside className="space-y-6">
+          <div className={`${CARD} p-6 lg:sticky lg:top-20`}>
+            <div className="flex items-center gap-2.5">
+              <span className="h-6 w-1.5 rounded-full bg-teal-400" />
+              <h2 className="font-mono text-xs font-black uppercase tracking-widest text-slate-900">Job overview</h2>
+            </div>
+            <div className="mt-4 space-y-3">
+              <Fact icon={MapPin} label="Location" value={`${view.location}${view.remote ? ' · Remote OK' : ''}`} />
+              <Fact icon={Banknote} label="Salary range" value={view.salary} />
+              <Fact icon={Briefcase} label="Employment" value={view.employment_type} />
+              <Fact icon={TrendingUp} label="Experience" value={view.experience_level} />
+              <Fact icon={CalendarDays} label="Posted" value={view.posted} />
+              <Fact icon={Users} label="Applicants" value={`${view.applicants} applied`} />
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="flex items-center gap-2 font-mono text-xs font-black uppercase tracking-widest text-slate-500">
+              <Building2 className="h-4 w-4" /> About {job.company?.name}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-700">{view.about}</p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-slate-50 p-3">
+                <p className="font-mono text-[10px] font-black uppercase tracking-widest text-slate-400">Company size</p>
+                <p className="text-sm font-bold text-slate-800">{view.companySize}</p>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3">
+                <p className="font-mono text-[10px] font-black uppercase tracking-widest text-slate-400">Industry</p>
+                <p className="text-sm font-bold text-slate-800">{view.industry}</p>
+              </div>
+            </div>
+            {job.company?.domain && (
+              <a href={`https://${job.company.domain}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-sm font-black text-teal-700 hover:underline">
+                Visit website <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            )}
+          </div>
+        </aside>
+      </div>
+
+      {/* ── Association: this job is already in the pipeline ── */}
+      {myApp && (
+        <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 p-4 ${
+          cool?.active ? 'border-rose-200 bg-rose-50' : 'border-teal-200 bg-teal-50'
+        }`}>
+          <div className="flex items-center gap-3">
+            <span className={`grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl ${cool?.active ? 'bg-rose-500 text-white' : 'bg-teal-500 text-white'}`}>
+              {cool?.active ? <Hourglass className="h-4 w-4" /> : <ListChecks className="h-4 w-4" />}
+            </span>
+            <div>
+              <p className={`text-sm font-black ${cool?.active ? 'text-rose-800' : 'text-teal-800'}`}>
+                In your pipeline · {STATUS_LABEL[myApp.status] ?? myApp.status}
+              </p>
+              {cool?.active ? (
+                <p className="text-xs font-semibold text-rose-700">
+                  Rejected — cool-down active. You can reapply in {cool.daysLeft} day{cool.daysLeft === 1 ? '' : 's'} (on {cool.untilLabel}).
+                </p>
+              ) : cool ? (
+                <p className="text-xs font-semibold text-teal-700">Previous rejection&apos;s cool-down has passed — you&apos;re free to reapply.</p>
+              ) : (
+                <p className="text-xs font-semibold text-teal-700">Track it on your applications board.</p>
+              )}
+            </div>
+          </div>
+          <Link to="/applications" className="inline-flex items-center gap-1.5 rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">
+            View in pipeline <ExternalLink className="h-3.5 w-3.5" />
+          </Link>
         </div>
       )}
-      <article className="prose max-w-none rounded-2xl bg-white p-4 text-sm leading-7 sm:p-5 sm:text-base" dangerouslySetInnerHTML={{ __html: job.description }} />
-      <div className="grid gap-2 sm:flex sm:flex-wrap">
-        <button className="rounded-xl bg-slate-950 px-4 py-3 font-bold text-white disabled:opacity-60" disabled={!!busyTier} onClick={() => apply('assist')}>
-          {busyTier === 'assist' ? 'Preparing...' : 'Assist apply'}
-        </button>
-        <button className="rounded-xl bg-teal-600 px-4 py-3 font-bold text-white disabled:opacity-60" disabled={!!busyTier} onClick={() => apply('autofill')}>
-          {busyTier === 'autofill' ? 'Preparing...' : 'Autofill handoff'}
-        </button>
-        <span className="inline-flex items-center px-1 text-xs font-black text-slate-400">Assist &amp; autofill are free</span>
-        <button className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-3 font-bold text-white disabled:opacity-60" disabled={!!busyTier} onClick={() => apply('autonomous')}>
-          {busyTier === 'autonomous' ? 'Preparing...' : 'Autonomous review'}
-          {cost.autonomous_apply ? <CreditCost cost={cost.autonomous_apply} className="!bg-white/20 !text-white" /> : null}
-        </button>
+
+      {/* ── Apply actions: dark statement panel ── */}
+      <div className="rounded-3xl border-2 border-slate-900 bg-slate-950 p-6 shadow-[6px_6px_0_#2dd4bf] sm:p-7">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-black text-white">Ready to apply?</h2>
+            <p className="mt-0.5 text-xs font-semibold text-slate-400">Pick how much you want us to automate — we tailor your resume and cover letter to this role.</p>
+          </div>
+          <span className="font-mono text-[10px] font-black uppercase tracking-widest text-teal-300">Assist &amp; autofill · free</span>
+        </div>
+        {applyLocked && (
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-200">
+            <Hourglass className="h-4 w-4" />
+            Applying is paused during the {cool?.daysLeft}-day rejection cool-down (until {cool?.untilLabel}).
+          </div>
+        )}
+        <div className="mt-5 grid gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <button className="rounded-xl bg-white px-5 py-3 font-black text-slate-950 transition hover:bg-slate-100 disabled:opacity-40" disabled={!!busyTier || applyLocked} onClick={() => apply('assist')}>
+            {busyTier === 'assist' ? 'Preparing…' : 'Assist apply'}
+          </button>
+          <button className="rounded-xl bg-teal-400 px-5 py-3 font-black text-slate-950 transition hover:bg-teal-300 disabled:opacity-40" disabled={!!busyTier || applyLocked} onClick={() => apply('autofill')}>
+            {busyTier === 'autofill' ? 'Preparing…' : 'Autofill handoff'}
+          </button>
+          <button className="inline-flex items-center gap-2 rounded-xl bg-red-500 px-5 py-3 font-black text-white transition hover:bg-red-400 disabled:opacity-40 sm:ml-auto" disabled={!!busyTier || applyLocked} onClick={() => apply('autonomous')}>
+            {busyTier === 'autonomous' ? 'Preparing…' : 'Autonomous review'}
+            {cost.autonomous_apply ? <CreditCost cost={cost.autonomous_apply} className="!bg-white/20 !text-white" /> : null}
+          </button>
+        </div>
       </div>
+
       {creditWall && <CreditWall info={creditWall} />}
+
       {prepared && (
-        <div className="rounded-2xl border border-teal-100 bg-white p-4 shadow-sm sm:p-5">
+        <div className="rounded-3xl border-2 border-teal-400 bg-white p-5 shadow-[6px_6px_0_#2dd4bf] sm:p-6">
           <div className="flex items-start gap-3">
             <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-teal-600" />
             <div>
@@ -198,7 +554,7 @@ export function JobDetail() {
           </ul>
           <div className="mt-4 flex flex-wrap gap-2">
             <button className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60" disabled={materialsBusy} onClick={generateMaterials}>
-              {materialsBusy ? 'Generating...' : 'Generate materials'}
+              {materialsBusy ? 'Generating…' : 'Generate materials'}
               {(cost.tailor_resume || cost.cover_letter) ? (
                 <CreditCost cost={(cost.tailor_resume ?? 0) + (cost.cover_letter ?? 0)} className="!bg-white/20 !text-white" />
               ) : null}

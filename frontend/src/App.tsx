@@ -5,6 +5,7 @@ import { Dashboard } from './routes/dashboard/Dashboard';
 import { JobsList } from './routes/jobs/JobsList';
 import { JobDetail } from './routes/jobs/JobDetail';
 import { ApplicationsKanban } from './routes/applications/ApplicationsKanban';
+import { TasksPage } from './routes/applications/TasksPage';
 import { ConnectionsPage } from './routes/network/ConnectionsPage';
 import { InterviewGrill } from './routes/interview/InterviewGrill';
 import { Login } from './routes/auth/Login';
@@ -17,11 +18,10 @@ import { ProfilePage } from './routes/profile/ProfilePage';
 import { NetworkGraphPage } from './routes/network/NetworkGraph';
 import { CompaniesPage } from './routes/companies/CompaniesPage';
 import { CompanyDetailPage } from './routes/companies/CompanyDetailPage';
-import { Briefcase, LayoutDashboard, Send, Users, Mic2, Compass, Bell, Settings, Sun, Moon, TrendingUp, FileText, Activity, LayoutGrid, Coins, KeyRound, Network as NetworkIcon, Sparkles, Building2 } from 'lucide-react';
+import { Briefcase, LayoutDashboard, Send, Users, Mic2, Compass, Bell, Settings, Sun, Moon, TrendingUp, FileText, Activity, LayoutGrid, Coins, KeyRound, Network as NetworkIcon, Sparkles, Building2, ListChecks } from 'lucide-react';
 import { useThemeStore, resolveTheme } from './lib/theme';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Notifications } from './api/endpoints';
-import { CreditBalancePill } from './components/Credits';
 import { useBillingStore } from './stores/useBillingStore';
 
 function AppNavigation() {
@@ -31,6 +31,9 @@ function AppNavigation() {
   // Keep the balance chip fresh as the user moves between pages (spends happen elsewhere).
   useEffect(() => { if (user) refreshBalance(); }, [user, pathname, refreshBalance]);
   const location = useLocation();
+  const theme = useThemeStore((s) => s.theme);
+  const setTheme = useThemeStore((s) => s.setTheme);
+  const isDark = resolveTheme(theme) === 'dark';
 
   const navItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
@@ -75,7 +78,26 @@ function AppNavigation() {
           </nav>
 
           <div className="ml-auto flex flex-shrink-0 items-center gap-2">
-            <CreditBalancePill />
+            <Link
+              to="/tasks"
+              className={`grid h-11 w-11 place-items-center rounded-2xl transition ${
+                location.pathname.startsWith('/tasks')
+                  ? 'bg-slate-950 text-teal-300'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+              aria-label="Goals & to-dos"
+              title="Goals & to-dos"
+            >
+              <ListChecks className="h-5 w-5" />
+            </Link>
+            <button
+              onClick={() => setTheme(isDark ? 'light' : 'dark')}
+              className="hidden h-11 w-11 place-items-center rounded-2xl bg-slate-100 text-slate-600 transition hover:bg-slate-200 sm:grid"
+              aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={isDark ? 'Light mode' : 'Dark mode'}
+            >
+              {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </button>
             <NotificationCenter />
             <Link
               to="/profile"
@@ -119,6 +141,7 @@ function AppNavigation() {
 }
 
 const MORE_LINKS: { to: string; label: string; desc: string; icon: typeof Coins }[] = [
+  { to: '/tasks', label: 'Goals & to-dos', desc: 'Search targets and follow-ups', icon: ListChecks },
   { to: '/companies', label: 'Companies', desc: 'Connections, careers & opportunities', icon: Building2 },
   { to: '/network', label: 'Network graph', desc: 'Explore & build your connections', icon: NetworkIcon },
   { to: '/settings/billing', label: 'Billing & credits', desc: 'Balance, pricing and top-ups', icon: Coins },
@@ -371,6 +394,7 @@ export default function App() {
             <Route path="/jobs" element={<ProtectedRoute initialized={initialized} user={user}><JobsList /></ProtectedRoute>} />
             <Route path="/jobs/:id" element={<ProtectedRoute initialized={initialized} user={user}><JobDetail /></ProtectedRoute>} />
             <Route path="/applications" element={<ProtectedRoute initialized={initialized} user={user}><ApplicationsKanban /></ProtectedRoute>} />
+            <Route path="/tasks" element={<ProtectedRoute initialized={initialized} user={user}><TasksPage /></ProtectedRoute>} />
             <Route path="/connections" element={<ProtectedRoute initialized={initialized} user={user}><ConnectionsPage /></ProtectedRoute>} />
             <Route path="/interview" element={<ProtectedRoute initialized={initialized} user={user}><InterviewGrill /></ProtectedRoute>} />
             <Route path="/network" element={<ProtectedRoute initialized={initialized} user={user}><NetworkGraphPage /></ProtectedRoute>} />

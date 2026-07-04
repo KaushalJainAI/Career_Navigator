@@ -6,6 +6,7 @@ import { useJobsStore } from '../../stores/useJobsStore';
 import { Applications } from '../../api/endpoints';
 import { CreditCost } from '../../components/Credits';
 import { useBillingStore } from '../../stores/useBillingStore';
+import { SavedJobs } from './SavedJobs';
 
 interface DashboardStats {
   active_applications: number;
@@ -168,11 +169,13 @@ export function Dashboard() {
 
       <FeatureShowcase />
 
+      <SavedJobs />
+
       <section>
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Today&apos;s strongest matches</h2>
-            <p className="text-sm font-semibold text-slate-500 sm:text-base">Start where your odds and energy are highest.</p>
+            <h2 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Discover jobs</h2>
+            <p className="text-sm font-semibold text-slate-500 sm:text-base">Fresh openings scored against your profile — start where your odds are highest.</p>
           </div>
           <Link to="/jobs" className="hidden rounded-2xl bg-slate-950 px-4 py-2 text-sm font-black text-white sm:inline-flex">View all</Link>
         </div>

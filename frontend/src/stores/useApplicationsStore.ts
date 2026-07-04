@@ -22,14 +22,16 @@ export interface Application {
   follow_up_on?: string | null;
   created_at?: string;
   updated_at?: string;
+  events?: { id: number; type: string; payload?: { status?: string } | null; created_at?: string }[];
 }
 
 interface AppState {
   applications: Application[];
   fetch: () => Promise<void>;
-  create: (jobId: number, tier?: string) => Promise<Application>;
+  create: (jobId: number, tier?: string, status?: string) => Promise<Application>;
   setStatus: (id: number, status: string) => Promise<void>;
   patchApp: (id: number, payload: Partial<Application>) => Promise<void>;
+  remove: (id: number) => Promise<void>;
 }
 
 export const useApplicationsStore = create<AppState>((set, get) => ({
@@ -38,8 +40,8 @@ export const useApplicationsStore = create<AppState>((set, get) => ({
     const data = await Applications.list();
     set({ applications: data.results ?? data });
   },
-  create: async (jobId, tier) => {
-    const app = await Applications.create(jobId, tier);
+  create: async (jobId, tier, status) => {
+    const app = await Applications.create(jobId, tier, status);
     set({ applications: [app, ...get().applications] });
     return app;
   },
@@ -58,5 +60,9 @@ export const useApplicationsStore = create<AppState>((set, get) => ({
         a.id === id ? { ...a, ...updated } : a,
       ),
     });
+  },
+  remove: async (id) => {
+    await Applications.remove(id);
+    set({ applications: get().applications.filter((a) => a.id !== id) });
   },
 }));

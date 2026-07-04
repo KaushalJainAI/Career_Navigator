@@ -71,10 +71,11 @@ export const Applications = {
   analytics: () => api.get('/applications/analytics/').then((r) => r.data),
   prepare: (jobId: number, tier: 'assist' | 'autofill' | 'autonomous') =>
     api.post('/applications/prepare/', { job_id: jobId, tier }).then((r) => r.data),
-  create: (jobId: number, tier?: string) =>
-    api.post('/applications/', { job: jobId, tier_used: tier }).then((r) => r.data),
+  create: (jobId: number, tier?: string, status?: string) =>
+    api.post('/applications/', { job: jobId, tier_used: tier, ...(status ? { status } : {}) }).then((r) => r.data),
   patch: (id: number, payload: Record<string, unknown>) =>
     api.patch(`/applications/${id}/`, payload).then((r) => r.data),
+  remove: (id: number) => api.delete(`/applications/${id}/`).then((r) => r.data),
   approve: (id: number) =>
     api.post(`/applications/${id}/approve/`).then((r) => r.data as { approval_token: string }),
 };
