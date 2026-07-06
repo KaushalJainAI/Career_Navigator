@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useJobsStore } from '../../stores/useJobsStore';
 import { useApplicationsStore } from '../../stores/useApplicationsStore';
-import { Link } from 'react-router-dom';
-import { Search, MapPin, Building, ChevronRight, SlidersHorizontal, ArrowUpDown, X, ListChecks, Hourglass } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Search, MapPin, Building, ChevronRight, SlidersHorizontal, ArrowUpDown, X, ListChecks, Hourglass, Plus } from 'lucide-react';
 import { GhostRiskBadge } from '../../components/GhostRiskBadge';
+import { Jobs } from '../../api/endpoints';
 import { rejectionCooldown } from '../../lib/cooldown';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -28,6 +29,7 @@ export function JobsList() {
   const [sort, setSort] = useState<SortKey>('relevance');
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [hideGhost, setHideGhost] = useState(false);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => { fetch(); }, [fetch]);
   useEffect(() => { fetchApps().catch(() => undefined); }, [fetchApps]);
@@ -69,7 +71,15 @@ export function JobsList() {
           <h1 className="text-2xl font-bold tracking-tight text-slate-800">Discover Jobs</h1>
           <p className="text-slate-500 text-sm mt-1">Find and apply to positions matching your profile.</p>
         </div>
+        <button
+          onClick={() => setAdding(true)}
+          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white shadow-[0_4px_0_#2dd4bf] transition hover:bg-slate-800"
+        >
+          <Plus className="h-4 w-4" /> Add a job
+        </button>
       </div>
+
+      {adding && <AddJobForm onClose={() => setAdding(false)} />}
 
       {/* Search Bar */}
       <div className="relative">
@@ -222,5 +232,101 @@ export function JobsList() {
         </div>
       )}
     </div>
+  );
+}
+
+function AddJobForm({ onClose }: { onClose: () => void }) {
+  const navigate = useNavigate();
+  const refetch = useJobsStore((s) => s.fetch);
+  const [f, setF] = useState({
+    title: '', company_name: '', location: '', remote: false,
+    apply_url: '', salary_min: '', salary_max: '', description: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  function set<K extends keyof typeof f>(k: K, v: (typeof f)[K]) { setF((s) => ({ ...s, [k]: v })); }
+
+  const canSave = f.title.trim() && f.company_name.trim() && !saving;
+
+  async function submit() {
+    if (!canSave) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const payload: Record<string, unknown> = {
+        title: f.title.trim(),
+        company_name: f.company_name.trim(),
+        location: f.location.trim(),
+        remote: f.remote,
+        apply_url: f.apply_url.trim(),
+        description: f.description.trim(),
+      };
+      if (f.salary_min) payload.salary_min = Number(f.salary_min);
+      if (f.salary_max) payload.salary_max = Number(f.salary_max);
+      const created = await Jobs.create(payload);
+      await refetch().catch(() => undefined);
+      onClose();
+      navigate(`/jobs/${created.id}`);
+    } catch (e) {
+      const detail = (e as { response?: { data?: Record<string, string[]> } })?.response?.data;
+      const first = detail && Object.values(detail)[0];
+      setError(Array.isArray(first) ? first[0] : 'Could not add the job. Check the fields and try again.');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 p-4 pt-12 sm:pt-20" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl sm:p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-black tracking-tight text-slate-900">Add a job</h2>
+            <p className="text-xs font-semibold text-slate-500">Found a role elsewhere? Add it to track, tailor and prep for it.</p>
+          </div>
+          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="Close">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <Field label="Job title" required value={f.title} onChange={(v) => set('title', v)} placeholder="Senior Backend Engineer" />
+          <Field label="Company" required value={f.company_name} onChange={(v) => set('company_name', v)} placeholder="Acme Robotics" />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Location" value={f.location} onChange={(v) => set('location', v)} placeholder="Remote / SF" />
+            <label className="flex items-end gap-2 pb-2">
+              <input type="checkbox" checked={f.remote} onChange={(e) => set('remote', e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
+              <span className="text-sm font-bold text-slate-600">Remote</span>
+            </label>
+          </div>
+          <Field label="Apply URL" value={f.apply_url} onChange={(v) => set('apply_url', v)} placeholder="https://…" />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Salary min" type="number" value={f.salary_min} onChange={(v) => set('salary_min', v)} placeholder="120000" />
+            <Field label="Salary max" type="number" value={f.salary_max} onChange={(v) => set('salary_max', v)} placeholder="160000" />
+          </div>
+          <label className="block">
+            <span className="block text-xs font-bold uppercase text-slate-500">Description</span>
+            <textarea value={f.description} onChange={(e) => set('description', e.target.value)} rows={4} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none" placeholder="Paste the job description — it powers match scoring and tailoring." />
+          </label>
+        </div>
+
+        {error && <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700">{error}</p>}
+
+        <div className="mt-4 flex gap-2">
+          <button onClick={submit} disabled={!canSave} className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-black text-white shadow-[0_4px_0_#2dd4bf] transition hover:bg-slate-800 disabled:opacity-50 disabled:shadow-none">
+            {saving ? 'Adding…' : 'Add job'}
+          </button>
+          <button onClick={onClose} className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-200">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, placeholder, type = 'text', required = false }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; required?: boolean }) {
+  return (
+    <label className="block">
+      <span className="block text-xs font-bold uppercase text-slate-500">{label}{required && <span className="text-teal-600"> *</span>}</span>
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none" />
+    </label>
   );
 }

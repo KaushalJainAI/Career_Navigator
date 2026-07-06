@@ -60,12 +60,12 @@ export function SavedJobs() {
               <div key={a.id} className="group relative overflow-hidden rounded-2xl border border-slate-900/10 bg-white p-3 shadow-sm transition hover:-translate-y-1 hover:shadow-xl sm:rounded-[1.5rem] sm:p-5">
                 <button
                   onClick={() => { if (window.confirm('Remove this saved job?')) remove(a.id); }}
-                  className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-slate-100 text-slate-400 opacity-0 transition hover:bg-rose-100 hover:text-rose-600 group-hover:opacity-100"
+                  className="absolute right-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-full bg-slate-100 text-slate-400 opacity-100 transition hover:bg-rose-100 hover:text-rose-600 sm:opacity-0 sm:group-hover:opacity-100"
                   aria-label="Remove saved job"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
-                <Link to={`/jobs/${a.job}`} className="block">
+                <Link to={`/jobs/${a.job}`} className="block after:absolute after:inset-0 after:content-['']">
                   <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-base font-black text-slate-700 sm:h-12 sm:w-12 sm:rounded-2xl sm:text-xl">
                     {a.job_detail?.company?.name?.[0] || '?'}
                   </div>

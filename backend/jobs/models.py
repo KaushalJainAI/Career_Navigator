@@ -35,6 +35,7 @@ class Source(models.Model):
         ('web_search', 'Web search'),
         ('cli_delegate', 'CLI delegate'),
         ('linkedin', 'LinkedIn (best-effort)'),
+        ('manual', 'Manual entry'),
     ]
 
     name = models.CharField(max_length=128, unique=True)
@@ -61,6 +62,13 @@ class JobPosting(models.Model):
     posted_at = models.DateTimeField(null=True, blank=True)
     raw = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # AI-generated structured breakdown of the posting (responsibilities,
+    # requirements, benefits, about_company). Generated once on demand and cached
+    # here — it's a property of the posting, so it's shared across users. Empty
+    # dict means "not generated yet"; the UI shows a generate CTA instead of
+    # fabricating content.
+    ai_breakdown = models.JSONField(default=dict, blank=True)
 
     # Ghost-Job Shield: liveness + repost tracking and the derived risk score.
     # first_seen_at is the moment we first saw THIS copy (resets when the JD

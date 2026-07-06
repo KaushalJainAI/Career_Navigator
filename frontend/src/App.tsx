@@ -7,6 +7,7 @@ import { JobDetail } from './routes/jobs/JobDetail';
 import { ApplicationsKanban } from './routes/applications/ApplicationsKanban';
 import { TasksPage } from './routes/applications/TasksPage';
 import { ConnectionsPage } from './routes/network/ConnectionsPage';
+import { ContactDetailPage } from './routes/network/ContactDetailPage';
 import { InterviewGrill } from './routes/interview/InterviewGrill';
 import { Login } from './routes/auth/Login';
 import { ResetPassword } from './routes/auth/ResetPassword';
@@ -396,6 +397,7 @@ export default function App() {
             <Route path="/applications" element={<ProtectedRoute initialized={initialized} user={user}><ApplicationsKanban /></ProtectedRoute>} />
             <Route path="/tasks" element={<ProtectedRoute initialized={initialized} user={user}><TasksPage /></ProtectedRoute>} />
             <Route path="/connections" element={<ProtectedRoute initialized={initialized} user={user}><ConnectionsPage /></ProtectedRoute>} />
+            <Route path="/connections/:id" element={<ProtectedRoute initialized={initialized} user={user}><ContactDetailPage /></ProtectedRoute>} />
             <Route path="/interview" element={<ProtectedRoute initialized={initialized} user={user}><InterviewGrill /></ProtectedRoute>} />
             <Route path="/network" element={<ProtectedRoute initialized={initialized} user={user}><NetworkGraphPage /></ProtectedRoute>} />
             <Route path="/companies" element={<ProtectedRoute initialized={initialized} user={user}><CompaniesPage /></ProtectedRoute>} />

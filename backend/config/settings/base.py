@@ -273,6 +273,16 @@ PORTAL_SESSION_COOKIES = {
     'naukri': os.environ.get('NAUKRI_SESSION_COOKIE', ''),
     'unstop': os.environ.get('UNSTOP_SESSION_COOKIE', ''),
     'ycombinator': os.environ.get('YC_SESSION_COOKIE', ''),
+    'instahyre': os.environ.get('INSTAHYRE_SESSION_COOKIE', ''),
+    'wellfound': os.environ.get('WELLFOUND_SESSION_COOKIE', ''),
+    'shine': os.environ.get('SHINE_SESSION_COOKIE', ''),
+    'indeed': os.environ.get('INDEED_SESSION_COOKIE', ''),
+    'timesjobs': os.environ.get('TIMESJOBS_SESSION_COOKIE', ''),
+    'foundit': os.environ.get('FOUNDIT_SESSION_COOKIE', ''),
+    'cutshort': os.environ.get('CUTSHORT_SESSION_COOKIE', ''),
+    'hirect': os.environ.get('HIRECT_SESSION_COOKIE', ''),
+    'internshala': os.environ.get('INTERNSHALA_SESSION_COOKIE', ''),
+    'glassdoor': os.environ.get('GLASSDOOR_SESSION_COOKIE', ''),
 }
 
 # --- Notification channels ---

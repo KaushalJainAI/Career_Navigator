@@ -1,3 +1,6 @@
+from uuid import uuid4
+
+from django.utils import timezone
 from rest_framework import serializers
 
 from .ghost import band_for
@@ -27,3 +30,40 @@ class JobPostingSerializer(serializers.ModelSerializer):
 
     def get_ghost_band(self, obj) -> str:
         return band_for(obj.ghost_risk)
+
+
+class JobPostingWriteSerializer(serializers.ModelSerializer):
+    """Create a job by hand (e.g. one the user found elsewhere). Accepts a plain
+    company name, files it under a shared 'Manual entry' source, and — since the
+    user vouches for it — marks it zero ghost-risk."""
+
+    company_name = serializers.CharField(write_only=True, max_length=255)
+    company_domain = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    class Meta:
+        model = JobPosting
+        fields = [
+            'id', 'company_name', 'company_domain', 'title', 'description',
+            'location', 'remote', 'salary_min', 'salary_max', 'salary_currency',
+            'apply_url', 'posted_at',
+        ]
+        read_only_fields = ['id']
+
+    def validate_company_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Company name is required.')
+        return value
+
+    def create(self, validated_data):
+        name = validated_data.pop('company_name')
+        domain = (validated_data.pop('company_domain', '') or '').strip()
+        source, _ = Source.objects.get_or_create(
+            name='Manual entry', defaults={'kind': 'manual'})
+        company, _ = Company.objects.get_or_create(name=name, domain=domain)
+        validated_data['source'] = source
+        validated_data['company'] = company
+        validated_data['external_id'] = f'manual-{uuid4().hex}'
+        validated_data['ghost_risk'] = 0
+        validated_data.setdefault('posted_at', timezone.now())
+        return super().create(validated_data)

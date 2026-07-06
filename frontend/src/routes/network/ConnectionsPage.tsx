@@ -53,7 +53,6 @@ interface Contact {
   name: string;
   title: string;
   company_name?: string;
-  location: string;
   email: string;
   profile_url: string;
   relationship_strength: number;
@@ -61,10 +60,22 @@ interface Contact {
   notes: string;
 }
 
-const STRENGTH = ['Not connected', 'Cold contact', 'Acquaintance', 'Know them', 'Close', 'Strong ally'];
+// How well the user knows this person — drives referral confidence. Index maps to the
+// backend's relationship_strength (0–5); index 0 is only for legacy/unknown records.
+const STRENGTH = ["Haven't met", 'Just met', 'Acquaintance', 'Know them well', 'Close', 'Strong ally'];
+const STRENGTH_TONE = [
+  'bg-slate-100 text-slate-500',
+  'bg-slate-100 text-slate-600',
+  'bg-sky-100 text-sky-700',
+  'bg-teal-100 text-teal-700',
+  'bg-emerald-100 text-emerald-700',
+  'bg-amber-100 text-amber-800',
+];
+// New contacts start at "Acquaintance" and are offered the four meaningful strengths.
+const STRENGTH_CHOICES = [1, 2, 3, 4, 5];
 
 const BLANK = {
-  name: '', title: '', company_name: '', location: '', email: '',
+  name: '', title: '', company_name: '', email: '',
   profile_url: '', relationship_strength: 2, tags: [] as string[], notes: '',
 };
 
@@ -88,7 +99,7 @@ function ContactsTab() {
     const q = query.trim().toLowerCase();
     if (!q) return contacts;
     return contacts.filter((c) =>
-      [c.name, c.title, c.company_name, c.location, ...(c.tags ?? [])]
+      [c.name, c.title, c.company_name, ...(c.tags ?? [])]
         .filter(Boolean).join(' ').toLowerCase().includes(q));
   }, [contacts, query]);
 
@@ -175,17 +186,17 @@ function ContactCard({ c, onEdit, onRemove }: { c: Contact; onEdit: () => void; 
   return (
     <div className="group flex flex-col rounded-2xl bg-white p-3 shadow-sm sm:p-4">
       <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-          <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-slate-100 text-sm font-black text-slate-700 sm:h-11 sm:w-11 sm:rounded-2xl">
+        <Link to={`/connections/${c.id}`} className="flex min-w-0 items-center gap-2.5 sm:gap-3" title={`Open ${c.name}'s profile`}>
+          <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-slate-100 text-sm font-black text-slate-700 transition group-hover:bg-teal-100 group-hover:text-teal-700 sm:h-11 sm:w-11 sm:rounded-2xl">
             {c.name?.[0]?.toUpperCase() || '?'}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-black text-slate-900 sm:text-base">{c.name}</p>
+            <p className="truncate text-sm font-black text-slate-900 group-hover:text-teal-700 sm:text-base">{c.name}</p>
             <p className="truncate text-[11px] font-semibold text-slate-500 sm:text-xs">
               {c.title}{c.company_name ? `${c.title ? ' · ' : ''}${c.company_name}` : ''}
             </p>
           </div>
-        </div>
+        </Link>
         <div className="flex flex-shrink-0 gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
           <button onClick={onEdit} className="grid h-8 w-8 place-items-center rounded-xl text-slate-400 hover:bg-slate-100" aria-label="Edit"><Pencil className="h-4 w-4" /></button>
           <button onClick={onRemove} className="grid h-8 w-8 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
@@ -193,8 +204,7 @@ function ContactCard({ c, onEdit, onRemove }: { c: Contact; onEdit: () => void; 
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-black text-slate-600">{STRENGTH[c.relationship_strength] ?? 'Contact'}</span>
-        {c.location && <span className="text-[11px] font-semibold text-slate-400">{c.location}</span>}
+        <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-black ${STRENGTH_TONE[c.relationship_strength] ?? STRENGTH_TONE[0]}`}>{STRENGTH[c.relationship_strength] ?? 'Contact'}</span>
       </div>
 
       {c.tags?.length > 0 && (
@@ -206,6 +216,7 @@ function ContactCard({ c, onEdit, onRemove }: { c: Contact; onEdit: () => void; 
       {c.notes && <p className="mt-2 line-clamp-2 text-xs font-semibold text-slate-500">{c.notes}</p>}
 
       <div className="mt-3 flex flex-wrap gap-3 pt-1">
+        <Link to={`/network?root=contact:${c.id}`} className="inline-flex items-center gap-1 text-xs font-black text-slate-600 hover:text-teal-700"><NetworkIcon className="h-3.5 w-3.5" /> In graph</Link>
         {c.email && <a href={`mailto:${c.email}`} className="inline-flex items-center gap-1 text-xs font-black text-slate-600 hover:text-slate-900"><Mail className="h-3.5 w-3.5" /> Email</a>}
         {c.profile_url && <a href={c.profile_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-black text-slate-600 hover:text-slate-900"><ExternalLink className="h-3.5 w-3.5" /> Profile</a>}
       </div>
@@ -216,64 +227,91 @@ function ContactCard({ c, onEdit, onRemove }: { c: Contact; onEdit: () => void; 
 function ContactForm({ initial, onSave, onCancel }: { initial?: Contact; onSave: (p: typeof BLANK) => void; onCancel: () => void }) {
   const [f, setF] = useState({ ...BLANK, ...(initial ? {
     name: initial.name, title: initial.title, company_name: initial.company_name ?? '',
-    location: initial.location, email: initial.email, profile_url: initial.profile_url,
+    email: initial.email, profile_url: initial.profile_url,
     relationship_strength: initial.relationship_strength, tags: initial.tags ?? [], notes: initial.notes,
   } : {}) });
   const [tagDraft, setTagDraft] = useState('');
   function set<K extends keyof typeof BLANK>(k: K, v: (typeof BLANK)[K]) { setF((s) => ({ ...s, [k]: v })); }
+  function addTag(raw: string) {
+    const t = raw.trim().replace(/,$/, '');
+    if (t && !f.tags.includes(t)) set('tags', [...f.tags, t]);
+    setTagDraft('');
+  }
 
   return (
-    <div className="col-span-2 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Input label="Name" value={f.name} onChange={(v) => set('name', v)} placeholder="Jane Doe" />
+    <div className="col-span-2 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 xl:col-span-3">
+      <h3 className="text-sm font-black text-slate-900">{initial ? 'Edit contact' : 'Add a connection'}</h3>
+
+      {/* Who they are */}
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Input label="Name" required value={f.name} onChange={(v) => set('name', v)} placeholder="Jane Doe" />
         <Input label="Role / title" value={f.title} onChange={(v) => set('title', v)} placeholder="Staff Engineer" />
         <Input label="Company" value={f.company_name} onChange={(v) => set('company_name', v)} placeholder="Stripe" icon={Building2} />
-        <Input label="Location" value={f.location} onChange={(v) => set('location', v)} placeholder="Remote / SF" />
-        <Input label="Email" value={f.email} onChange={(v) => set('email', v)} placeholder="jane@company.com" />
-        <Input label="Profile URL (LinkedIn)" value={f.profile_url} onChange={(v) => set('profile_url', v)} placeholder="https://linkedin.com/in/…" />
-        <label className="block">
-          <span className="block text-xs font-bold uppercase text-slate-500">Relationship</span>
-          <select value={f.relationship_strength} onChange={(e) => set('relationship_strength', Number(e.target.value))} className="mt-1 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm">
-            {STRENGTH.map((label, i) => <option key={i} value={i}>{label}</option>)}
-          </select>
-        </label>
-        <label className="block">
-          <span className="block text-xs font-bold uppercase text-slate-500">Tags</span>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {f.tags.map((t) => (
-              <span key={t} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                {t}<button onClick={() => set('tags', f.tags.filter((x) => x !== t))} className="text-slate-400 hover:text-red-600">×</button>
-              </span>
-            ))}
-          </div>
+      </div>
+
+      {/* How you know them */}
+      <div className="mt-4">
+        <span className="block text-xs font-bold uppercase text-slate-500">How well you know them</span>
+        <p className="mt-0.5 text-[11px] font-semibold text-slate-400">Sets how confidently we'll suggest them for a referral.</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {STRENGTH_CHOICES.map((i) => (
+            <button
+              type="button"
+              key={i}
+              onClick={() => set('relationship_strength', i)}
+              className={`rounded-full px-3 py-1.5 text-xs font-black transition ${f.relationship_strength === i ? 'bg-slate-950 text-white shadow-[0_3px_0_#2dd4bf]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              {STRENGTH[i]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* How to reach them */}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <Input label="Email" type="email" value={f.email} onChange={(v) => set('email', v)} placeholder="jane@company.com" icon={Mail} />
+        <Input label="LinkedIn / profile" value={f.profile_url} onChange={(v) => set('profile_url', v)} placeholder="linkedin.com/in/…" icon={ExternalLink} />
+      </div>
+
+      {/* Context */}
+      <div className="mt-4">
+        <span className="block text-xs font-bold uppercase text-slate-500">Tags</span>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {f.tags.map((t) => (
+            <span key={t} className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-xs font-bold text-teal-700">
+              {t}<button type="button" onClick={() => set('tags', f.tags.filter((x) => x !== t))} className="text-teal-400 hover:text-red-600">×</button>
+            </span>
+          ))}
           <input
             value={tagDraft}
             onChange={(e) => setTagDraft(e.target.value)}
-            onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ',') && tagDraft.trim()) { e.preventDefault(); if (!f.tags.includes(tagDraft.trim())) set('tags', [...f.tags, tagDraft.trim()]); setTagDraft(''); } }}
-            placeholder="e.g. referral, ex-colleague"
-            className="mt-1 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagDraft); } }}
+            onBlur={() => addTag(tagDraft)}
+            placeholder={f.tags.length ? 'Add another…' : 'e.g. referral, ex-colleague'}
+            className="min-w-[8rem] flex-1 rounded-2xl border border-slate-200 px-3 py-1.5 text-sm focus:border-slate-400 focus:outline-none"
           />
-        </label>
+        </div>
       </div>
-      <label className="mt-3 block">
+      <label className="mt-4 block">
         <span className="block text-xs font-bold uppercase text-slate-500">Notes</span>
-        <textarea value={f.notes} onChange={(e) => set('notes', e.target.value)} rows={2} className="mt-1 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" placeholder="How you know them, last touchpoint…" />
+        <textarea value={f.notes} onChange={(e) => set('notes', e.target.value)} rows={2} className="mt-1 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none" placeholder="How you met, last touchpoint, what they can help with…" />
       </label>
-      <div className="mt-3 flex gap-2">
-        <button onClick={() => f.name.trim() && onSave(f)} disabled={!f.name.trim()} className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-black text-white disabled:opacity-50">{initial ? 'Save' : 'Add contact'}</button>
-        <button onClick={onCancel} className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-600">Cancel</button>
+
+      <div className="mt-4 flex gap-2">
+        <button onClick={() => f.name.trim() && onSave(f)} disabled={!f.name.trim()} className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-black text-white shadow-[0_4px_0_#2dd4bf] disabled:opacity-50 disabled:shadow-none">{initial ? 'Save changes' : 'Add connection'}</button>
+        <button onClick={onCancel} className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-600 hover:bg-slate-200">Cancel</button>
       </div>
     </div>
   );
 }
 
-function Input({ label, value, onChange, placeholder, icon: Icon }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; icon?: typeof Building2 }) {
+function Input({ label, value, onChange, placeholder, icon: Icon, type = 'text', required = false }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; icon?: typeof Building2; type?: string; required?: boolean }) {
   return (
     <label className="block">
-      <span className="block text-xs font-bold uppercase text-slate-500">{label}</span>
+      <span className="block text-xs font-bold uppercase text-slate-500">{label}{required && <span className="text-teal-600"> *</span>}</span>
       <div className="relative mt-1">
         {Icon && <Icon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />}
-        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={`w-full rounded-2xl border border-slate-200 py-2 pr-3 text-sm focus:border-slate-400 focus:outline-none ${Icon ? 'pl-9' : 'pl-3'}`} />
+        <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={`w-full rounded-2xl border border-slate-200 py-2 pr-3 text-sm focus:border-slate-400 focus:outline-none ${Icon ? 'pl-9' : 'pl-3'}`} />
       </div>
     </label>
   );

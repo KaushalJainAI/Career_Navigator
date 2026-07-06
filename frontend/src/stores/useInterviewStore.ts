@@ -21,7 +21,7 @@ interface InterviewState {
   turns: Turn[];
   currentIndex: number;
   loading: boolean;
-  start: (payload: { role: string; stage: string; difficulty?: string }) => Promise<void>;
+  start: (payload: { role: string; stage: string; difficulty?: string; company_name?: string }) => Promise<void>;
   answer: (text: string) => Promise<Turn>;
   generateReport: () => Promise<unknown>;
 }

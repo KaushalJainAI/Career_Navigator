@@ -35,10 +35,10 @@ export function Dashboard() {
   }, []);
 
   const kpis = [
-    { label: 'Active Applications', value: stats?.active_applications ?? 0, icon: Activity, tone: 'bg-sky-100 text-sky-700' },
-    { label: 'New Matches', value: stats?.new_matches ?? 0, icon: Briefcase, tone: 'bg-teal-100 text-teal-700' },
-    { label: 'Interviews Ready', value: stats?.interviews_ready ?? 0, icon: Clock, tone: 'bg-amber-100 text-amber-700' },
-    { label: 'Offers Received', value: stats?.offers_received ?? 0, icon: CheckCircle, tone: 'bg-emerald-100 text-emerald-700' },
+    { label: 'Active Applications', value: stats?.active_applications ?? 0, icon: Activity, tone: 'bg-sky-100 text-sky-700', to: '/applications?tab=applied' },
+    { label: 'New Matches', value: stats?.new_matches ?? 0, icon: Briefcase, tone: 'bg-teal-100 text-teal-700', to: '/jobs' },
+    { label: 'Interviews Ready', value: stats?.interviews_ready ?? 0, icon: Clock, tone: 'bg-amber-100 text-amber-700', to: '/applications?tab=interviewing' },
+    { label: 'Offers Received', value: stats?.offers_received ?? 0, icon: CheckCircle, tone: 'bg-emerald-100 text-emerald-700', to: '/applications?tab=outcome' },
   ];
 
   const pipeline = [
@@ -112,13 +112,14 @@ export function Dashboard() {
         {kpis.map((kpi) => {
           const Icon = kpi.icon;
           return (
-              <div key={kpi.label} className="group rounded-2xl border border-slate-900/10 bg-white p-3 shadow-sm transition hover:-translate-y-1 hover:shadow-xl sm:rounded-[1.5rem] sm:p-5">
+            <Link key={kpi.label} to={kpi.to} className="group relative rounded-2xl border border-slate-900/10 bg-white p-3 shadow-sm transition hover:-translate-y-1 hover:border-teal-300 hover:shadow-xl sm:rounded-[1.5rem] sm:p-5">
               <div className={`mb-2.5 grid h-8 w-8 place-items-center rounded-xl sm:mb-5 sm:h-12 sm:w-12 sm:rounded-2xl ${kpi.tone}`}>
                 <Icon className="h-4 w-4 sm:h-6 sm:w-6" />
               </div>
+              <ArrowUpRight className="absolute right-3 top-3 h-4 w-4 text-slate-300 opacity-0 transition group-hover:text-teal-600 group-hover:opacity-100 sm:right-5 sm:top-5" />
               <div className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{stats ? kpi.value : '-'}</div>
-              <div className="mt-0.5 text-xs font-bold text-slate-500 sm:mt-1 sm:text-sm">{kpi.label}</div>
-            </div>
+              <div className="mt-0.5 text-xs font-bold text-slate-500 group-hover:text-teal-700 sm:mt-1 sm:text-sm">{kpi.label}</div>
+            </Link>
           );
         })}
       </section>

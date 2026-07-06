@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { CalendarClock, ExternalLink, Pencil, AlertTriangle, Plus, Trash2, Search, X, Hourglass } from 'lucide-react';
 import { useApplicationsStore, type Application } from '../../stores/useApplicationsStore';
 import { Jobs } from '../../api/endpoints';
@@ -57,7 +58,15 @@ const ACTIVE = ['saved', 'tailored', 'ready', 'applied', 'phone', 'onsite'];
 
 export function ApplicationsKanban() {
   const { applications, fetch, setStatus, patchApp, create, remove } = useApplicationsStore();
-  const [activeTab, setActiveTab] = useState('to_apply');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = TABS.find((t) => t.key === searchParams.get('tab'))?.key;
+  const [activeTab, setActiveTab] = useState(urlTab ?? 'to_apply');
+  // Honour deep links like /applications?tab=interviewing when the param changes.
+  useEffect(() => { if (urlTab && urlTab !== activeTab) setActiveTab(urlTab); }, [urlTab]);
+  const selectTab = (key: string) => {
+    setActiveTab(key);
+    setSearchParams((prev) => { prev.set('tab', key); return prev; }, { replace: true });
+  };
   const [dragId, setDragId] = useState<number | null>(null);
   const [overCol, setOverCol] = useState<string | null>(null);
   useEffect(() => { fetch(); }, [fetch]);
@@ -115,7 +124,7 @@ export function ApplicationsKanban() {
             return (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => selectTab(tab.key)}
                 className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-black transition ${active ? 'bg-slate-950 text-white shadow-[0_4px_0_#2dd4bf]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
               >
                 {tab.label}
@@ -213,7 +222,13 @@ function ApplicationCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="truncate text-sm font-bold text-slate-800">{app.job_detail?.title || `Job #${app.job}`}</div>
+          <Link
+            to={`/jobs/${app.job}`}
+            draggable={false}
+            className="block truncate text-sm font-bold text-slate-800 hover:text-brand-600 hover:underline"
+          >
+            {app.job_detail?.title || `Job #${app.job}`}
+          </Link>
           <div className="mt-0.5 truncate text-xs font-semibold text-slate-500">
             {app.job_detail?.company?.name || 'Unknown company'}{app.job_detail?.location ? ` · ${app.job_detail.location}` : ''}
           </div>

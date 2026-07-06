@@ -1,8 +1,8 @@
 import { Link, useParams } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  CheckCircle2, ExternalLink, ShieldCheck, MapPin, Banknote, Briefcase, Clock,
-  Users, TrendingUp, Building2, Sparkles, XCircle, CalendarDays, Globe2, Hourglass, ListChecks,
+  CheckCircle2, ExternalLink, ShieldCheck, MapPin, Banknote, Clock,
+  Building2, Sparkles, XCircle, CalendarDays, Globe2, Hourglass, ListChecks,
 } from 'lucide-react';
 import { Jobs, Applications, Tailoring } from '../../api/endpoints';
 import { GhostRiskBadge, type GhostBand } from '../../components/GhostRiskBadge';
@@ -25,22 +25,20 @@ interface Job {
   ghost_risk?: number;
   ghost_band?: GhostBand;
   ghost_reasons?: string[];
-  // Optional structured fields (backend may not populate these yet).
   location?: string;
   remote?: boolean;
-  employment_type?: string;
-  experience_level?: string;
   salary_min?: number;
   salary_max?: number;
   salary_currency?: string;
   posted_at?: string;
-  applicant_count?: number;
-  responsibilities?: string[];
-  requirements?: string[];
-  benefits?: string[];
-  company_about?: string;
-  company_size?: string;
-  company_industry?: string;
+  // AI-generated, cached on the posting. Absent until someone generates it.
+  ai_breakdown?: {
+    responsibilities?: string[];
+    requirements?: string[];
+    benefits?: string[];
+    about_company?: string;
+    model?: string;
+  };
 }
 
 interface MatchReason {
@@ -72,44 +70,6 @@ interface GeneratedMaterials {
   resume?: { id: number; content: { raw_text?: string; summary?: string } };
   coverLetter?: { id: number; content: string };
 }
-
-// ---------------------------------------------------------------------------
-// Placeholder data — used to flesh out the page while the backend structured
-// fields are still being wired up. Real values always take precedence.
-// ---------------------------------------------------------------------------
-const DEMO_RESPONSIBILITIES = [
-  'Design, train and ship recommendation and resume-to-job matching models that power candidate discovery.',
-  'Own the full ML lifecycle: data pipelines, feature engineering, offline evaluation and online A/B tests.',
-  'Improve ranking quality and relevance using embeddings, learning-to-rank and lightweight LLM signals.',
-  'Partner with product and engineering to move experiments from notebook to production reliably.',
-  'Monitor live models for drift, bias and latency, and iterate based on measurable outcomes.',
-];
-const DEMO_REQUIREMENTS = [
-  '3+ years building and deploying ML models in production.',
-  'Strong Python and hands-on experience with PyTorch or TensorFlow.',
-  'Solid grounding in recommender systems, ranking, or information retrieval.',
-  'Comfortable with SQL, large-scale data processing and experiment design.',
-  'Familiarity with MLOps tooling (feature stores, model serving, CI/CD for ML).',
-];
-const DEMO_BENEFITS = [
-  'Equity + competitive base salary',
-  'Fully remote-friendly with flexible hours',
-  'Annual learning & conference budget',
-  'Comprehensive health, dental & vision',
-  'Latest hardware of your choice',
-];
-const DEMO_MATCH: Match = {
-  score: 0.78,
-  breakdown: { skills: 0.82, experience: 0.74, keywords: 0.71, seniority: 0.8 },
-  gaps: ['Kubernetes', 'Ranking at scale', 'Feature stores'],
-  matched_skills: ['Python', 'PyTorch', 'Recommender Systems', 'SQL', 'A/B Testing', 'Embeddings'],
-  explanation: [
-    { kind: 'positive', title: 'Core ML stack matches', detail: 'Your Python + PyTorch experience lines up with the day-to-day work.' },
-    { kind: 'positive', title: 'Recommender background', detail: 'Prior work on ranking/recommendation is exactly what this role centres on.' },
-    { kind: 'negative', title: 'Missing production K8s', detail: 'The role expects comfort deploying on Kubernetes — not seen on your resume.' },
-    { kind: 'neutral', title: 'Seniority aligned', detail: 'Your 4 years of experience fits the mid-level band for this posting.' },
-  ],
-};
 
 function money(n?: number, currency = 'USD') {
   if (!n) return null;
@@ -210,6 +170,8 @@ export function JobDetail() {
   const [busyTier, setBusyTier] = useState<ApplyTier | null>(null);
   const [materials, setMaterials] = useState<GeneratedMaterials>({});
   const [materialsBusy, setMaterialsBusy] = useState(false);
+  const [breakdownBusy, setBreakdownBusy] = useState(false);
+  const [breakdownError, setBreakdownError] = useState<string | null>(null);
   const [creditWall, setCreditWall] = useState<CreditShortfall | null>(null);
   const cost = useBillingStore((s) => s.costByReason);
   const refreshBalance = useBillingStore((s) => s.refresh);
@@ -264,6 +226,24 @@ export function JobDetail() {
     }
   }
 
+  async function generateBreakdown() {
+    if (!job) return;
+    setBreakdownBusy(true);
+    setBreakdownError(null);
+    setCreditWall(null);
+    try {
+      const data = await Jobs.breakdown(job.id);
+      setJob((prev) => (prev ? { ...prev, ai_breakdown: data } : prev));
+      refreshBalance();
+    } catch (e) {
+      const short = insufficientCredits(e);
+      if (short) setCreditWall(short);
+      else setBreakdownError("Couldn't generate a breakdown for this posting. Please try again.");
+    } finally {
+      setBreakdownBusy(false);
+    }
+  }
+
   async function downloadResume(fmt: 'txt' | 'docx') {
     if (!prepared) return;
     const blob = await Tailoring.exportResume(prepared.application.id, fmt);
@@ -277,34 +257,28 @@ export function JobDetail() {
     URL.revokeObjectURL(url);
   }
 
-  // Merge real data with placeholder fallbacks so the page always reads well.
+  // Everything on this page is either real (from the posting / match / AI
+  // breakdown) or shown as an explicit empty state — we never fabricate content.
   const view = useMemo(() => {
-    const responsibilities = job?.responsibilities?.length ? job.responsibilities : DEMO_RESPONSIBILITIES;
-    const requirements = job?.requirements?.length ? job.requirements : DEMO_REQUIREMENTS;
-    const benefits = job?.benefits?.length ? job.benefits : DEMO_BENEFITS;
-    const salary = money(job?.salary_min, job?.salary_currency) && money(job?.salary_max, job?.salary_currency)
-      ? `${money(job?.salary_min, job?.salary_currency)}–${money(job?.salary_max, job?.salary_currency)}`
-      : '$140k–$190k';
+    const lo = money(job?.salary_min, job?.salary_currency);
+    const hi = money(job?.salary_max, job?.salary_currency);
+    const salary = lo && hi ? `${lo}–${hi}` : lo || hi || null;
+    const bd = job?.ai_breakdown;
     return {
-      responsibilities,
-      requirements,
-      benefits,
+      responsibilities: bd?.responsibilities ?? [],
+      requirements: bd?.requirements ?? [],
+      benefits: bd?.benefits ?? [],
+      about: bd?.about_company?.trim() || null,
+      hasBreakdown: !!(bd?.responsibilities?.length || bd?.requirements?.length),
       salary,
-      location: job?.location ?? 'San Francisco, CA',
-      remote: job?.remote ?? true,
-      employment_type: job?.employment_type ?? 'Full-time',
-      experience_level: job?.experience_level ?? 'Mid–Senior',
-      posted: timeAgo(job?.posted_at) ?? '3d ago',
-      applicants: job?.applicant_count ?? 47,
-      about: job?.company_about ?? `${job?.company?.name ?? 'The company'} is a fast-growing product team building tools used by millions. The ML group owns discovery, personalisation and matching across the platform.`,
-      companySize: job?.company_size ?? '1,000–5,000',
-      industry: job?.company_industry ?? 'Software / SaaS',
+      location: job?.location?.trim() || null,
+      remote: !!job?.remote,
+      posted: timeAgo(job?.posted_at),
       descriptionIsThin: !job || textLength(job.description || '') < 220,
     };
   }, [job]);
 
-  const shownMatch = match ?? DEMO_MATCH;
-  const matchPct = Math.round(shownMatch.score * 100);
+  const matchPct = match ? Math.round(match.score * 100) : null;
 
   if (!job) return <p className="p-4 text-sm font-semibold text-slate-500">Loading…</p>;
 
@@ -323,14 +297,13 @@ export function JobDetail() {
             </div>
             <h1 className="mt-2 text-2xl font-black leading-tight tracking-tight text-white sm:text-4xl">{job.title}</h1>
             <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold text-slate-200">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5"><MapPin className="h-3.5 w-3.5 text-teal-300" />{view.location}</span>
+              {view.location && <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5"><MapPin className="h-3.5 w-3.5 text-teal-300" />{view.location}</span>}
               {view.remote && <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5"><Globe2 className="h-3.5 w-3.5 text-teal-300" />Remote-friendly</span>}
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5"><Banknote className="h-3.5 w-3.5 text-teal-300" />{view.salary}</span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5"><Briefcase className="h-3.5 w-3.5 text-teal-300" />{view.employment_type}</span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5"><Clock className="h-3.5 w-3.5 text-teal-300" />Posted {view.posted}</span>
+              {view.salary && <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5"><Banknote className="h-3.5 w-3.5 text-teal-300" />{view.salary}</span>}
+              {view.posted && <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5"><Clock className="h-3.5 w-3.5 text-teal-300" />Posted {view.posted}</span>}
             </div>
           </div>
-          <MatchRing pct={matchPct} />
+          {matchPct !== null && <MatchRing pct={matchPct} />}
         </div>
       </div>
 
@@ -351,59 +324,73 @@ export function JobDetail() {
             <SectionHead index="01" title="Your match for this role" />
             <p className="mt-1 pl-5 text-xs font-semibold text-slate-500">Scored against your resume, skills and experience.</p>
 
-            {/* breakdown */}
-            {shownMatch.breakdown && Object.keys(shownMatch.breakdown).length > 0 && (
-              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {Object.entries(shownMatch.breakdown).map(([k, v]) => (
-                  <div key={k} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center">
-                    <p className="text-2xl font-black text-slate-900">{Math.round(v * 100)}<span className="text-sm text-slate-400">%</span></p>
-                    <p className="font-mono text-[10px] font-black uppercase tracking-widest text-slate-500">{k}</p>
+            {match ? (
+              <>
+                {/* breakdown */}
+                {match.breakdown && Object.keys(match.breakdown).length > 0 && (
+                  <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {Object.entries(match.breakdown).map(([k, v]) => (
+                      <div key={k} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center">
+                        <p className="text-2xl font-black text-slate-900">{Math.round(v * 100)}<span className="text-sm text-slate-400">%</span></p>
+                        <p className="font-mono text-[10px] font-black uppercase tracking-widest text-slate-500">{k}</p>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
+                )}
 
-            {/* matched / missing skills */}
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
-                <p className="flex items-center gap-1.5 font-mono text-[11px] font-black uppercase tracking-widest text-emerald-700">
-                  <Sparkles className="h-3.5 w-3.5" /> Skills you have · {shownMatch.matched_skills?.length ?? 0}
-                </p>
-                <div className="mt-2.5 flex flex-wrap gap-1.5">
-                  {(shownMatch.matched_skills ?? []).map((s) => (
-                    <span key={s} className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-bold text-emerald-700">{s}</span>
-                  ))}
-                  {(shownMatch.matched_skills ?? []).length === 0 && <span className="text-xs text-slate-400">—</span>}
+                {/* matched / missing skills */}
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
+                    <p className="flex items-center gap-1.5 font-mono text-[11px] font-black uppercase tracking-widest text-emerald-700">
+                      <Sparkles className="h-3.5 w-3.5" /> Skills you have · {match.matched_skills?.length ?? 0}
+                    </p>
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      {(match.matched_skills ?? []).map((s) => (
+                        <span key={s} className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-bold text-emerald-700">{s}</span>
+                      ))}
+                      {(match.matched_skills ?? []).length === 0 && <span className="text-xs text-slate-400">—</span>}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-red-100 bg-red-50/40 p-4">
+                    <p className="flex items-center gap-1.5 font-mono text-[11px] font-black uppercase tracking-widest text-red-700">
+                      <XCircle className="h-3.5 w-3.5" /> Skills to add · {match.gaps?.length ?? 0}
+                    </p>
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      {(match.gaps ?? []).map((s) => (
+                        <span key={s} className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-bold text-red-700">{s}</span>
+                      ))}
+                      {(match.gaps ?? []).length === 0 && <span className="text-xs text-slate-400">None — great fit!</span>}
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="rounded-2xl border border-red-100 bg-red-50/40 p-4">
-                <p className="flex items-center gap-1.5 font-mono text-[11px] font-black uppercase tracking-widest text-red-700">
-                  <XCircle className="h-3.5 w-3.5" /> Skills to add · {shownMatch.gaps?.length ?? 0}
-                </p>
-                <div className="mt-2.5 flex flex-wrap gap-1.5">
-                  {(shownMatch.gaps ?? []).map((s) => (
-                    <span key={s} className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-bold text-red-700">{s}</span>
-                  ))}
-                  {(shownMatch.gaps ?? []).length === 0 && <span className="text-xs text-slate-400">None — great fit!</span>}
-                </div>
-              </div>
-            </div>
 
-            {/* explanation reasons */}
-            {shownMatch.explanation && shownMatch.explanation.length > 0 && (
-              <ul className="mt-5 space-y-2.5 border-t-2 border-dashed border-slate-200 pt-5">
-                {shownMatch.explanation.map((reason) => (
-                  <li key={reason.title} className="flex items-start gap-2.5 text-sm" data-kind={reason.kind}>
-                    <span className={`mt-1.5 h-2.5 w-2.5 flex-shrink-0 rounded-sm ${
-                      reason.kind === 'positive' ? 'bg-emerald-500' : reason.kind === 'negative' ? 'bg-red-500' : 'bg-slate-400'
-                    }`} />
-                    <span>
-                      <span className="font-black text-slate-900">{reason.title}</span>
-                      <span className="text-slate-600"> — {reason.detail}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                {/* explanation reasons */}
+                {match.explanation && match.explanation.length > 0 && (
+                  <ul className="mt-5 space-y-2.5 border-t-2 border-dashed border-slate-200 pt-5">
+                    {match.explanation.map((reason) => (
+                      <li key={reason.title} className="flex items-start gap-2.5 text-sm" data-kind={reason.kind}>
+                        <span className={`mt-1.5 h-2.5 w-2.5 flex-shrink-0 rounded-sm ${
+                          reason.kind === 'positive' ? 'bg-emerald-500' : reason.kind === 'negative' ? 'bg-red-500' : 'bg-slate-400'
+                        }`} />
+                        <span>
+                          <span className="font-black text-slate-900">{reason.title}</span>
+                          <span className="text-slate-600"> — {reason.detail}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ) : (
+              <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
+                <p className="text-sm font-bold text-slate-700">No match score yet</p>
+                <p className="mx-auto mt-1 max-w-sm text-xs font-semibold text-slate-500">
+                  Upload and parse a resume in your profile and we&apos;ll score how well you fit this role — skills you have, gaps to close, and why.
+                </p>
+                <Link to="/profile" className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800">
+                  Add your resume <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              </div>
             )}
           </div>
 
@@ -422,9 +409,35 @@ export function JobDetail() {
             </section>
           )}
 
-          <ListBlock index="03" title="What you'll do" items={view.responsibilities} numbered />
-          <ListBlock index="04" title="What we're looking for" items={view.requirements} />
-          <ListBlock index="05" title="Perks & benefits" items={view.benefits} />
+          {view.hasBreakdown ? (
+            <>
+              {view.responsibilities.length > 0 && <ListBlock index="03" title="What you'll do" items={view.responsibilities} numbered />}
+              {view.requirements.length > 0 && <ListBlock index="04" title="What we're looking for" items={view.requirements} />}
+              {view.benefits.length > 0 && <ListBlock index="05" title="Perks & benefits" items={view.benefits} />}
+              <p className="pl-1 text-[11px] font-semibold text-slate-400">
+                Responsibilities, requirements and perks above were expanded from the posting by AI — treat them as a guide, not the official listing.
+              </p>
+            </>
+          ) : (
+            <section className={`${CARD} p-6`}>
+              <SectionHead index="03" title="Role breakdown" />
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                This posting doesn&apos;t include a structured breakdown. Generate one and AI will read the
+                description and lay out the likely responsibilities, requirements, perks and a short company
+                summary — cached on this job, so it&apos;s free for everyone after the first run.
+              </p>
+              <button
+                onClick={generateBreakdown}
+                disabled={breakdownBusy}
+                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-50"
+              >
+                <Sparkles className="h-4 w-4 text-teal-300" />
+                {breakdownBusy ? 'Generating…' : 'Generate AI breakdown'}
+                {cost.job_breakdown ? <CreditCost cost={cost.job_breakdown} className="!bg-white/20 !text-white" /> : null}
+              </button>
+              {breakdownError && <p className="mt-3 text-xs font-bold text-red-600">{breakdownError}</p>}
+            </section>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -435,12 +448,11 @@ export function JobDetail() {
               <h2 className="font-mono text-xs font-black uppercase tracking-widest text-slate-900">Job overview</h2>
             </div>
             <div className="mt-4 space-y-3">
-              <Fact icon={MapPin} label="Location" value={`${view.location}${view.remote ? ' · Remote OK' : ''}`} />
-              <Fact icon={Banknote} label="Salary range" value={view.salary} />
-              <Fact icon={Briefcase} label="Employment" value={view.employment_type} />
-              <Fact icon={TrendingUp} label="Experience" value={view.experience_level} />
-              <Fact icon={CalendarDays} label="Posted" value={view.posted} />
-              <Fact icon={Users} label="Applicants" value={`${view.applicants} applied`} />
+              {view.location && <Fact icon={MapPin} label="Location" value={`${view.location}${view.remote ? ' · Remote OK' : ''}`} />}
+              {!view.location && view.remote && <Fact icon={Globe2} label="Location" value="Remote" />}
+              {view.salary && <Fact icon={Banknote} label="Salary range" value={view.salary} />}
+              {view.posted && <Fact icon={CalendarDays} label="Posted" value={view.posted} />}
+              {job.apply_url && <Fact icon={ExternalLink} label="Apply link" value={new URL(job.apply_url).hostname.replace(/^www\./, '')} />}
             </div>
           </div>
 
@@ -448,17 +460,13 @@ export function JobDetail() {
             <h2 className="flex items-center gap-2 font-mono text-xs font-black uppercase tracking-widest text-slate-500">
               <Building2 className="h-4 w-4" /> About {job.company?.name}
             </h2>
-            <p className="mt-3 text-sm leading-6 text-slate-700">{view.about}</p>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-slate-50 p-3">
-                <p className="font-mono text-[10px] font-black uppercase tracking-widest text-slate-400">Company size</p>
-                <p className="text-sm font-bold text-slate-800">{view.companySize}</p>
-              </div>
-              <div className="rounded-xl bg-slate-50 p-3">
-                <p className="font-mono text-[10px] font-black uppercase tracking-widest text-slate-400">Industry</p>
-                <p className="text-sm font-bold text-slate-800">{view.industry}</p>
-              </div>
-            </div>
+            {view.about ? (
+              <p className="mt-3 text-sm leading-6 text-slate-700">{view.about}</p>
+            ) : (
+              <p className="mt-3 text-sm leading-6 text-slate-400">
+                No company summary yet.{!view.hasBreakdown && ' Generating the role breakdown adds one.'}
+              </p>
+            )}
             {job.company?.domain && (
               <a href={`https://${job.company.domain}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-sm font-black text-teal-700 hover:underline">
                 Visit website <ExternalLink className="h-3.5 w-3.5" />

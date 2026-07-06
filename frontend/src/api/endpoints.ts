@@ -63,6 +63,9 @@ export const Jobs = {
     api.get('/jobs/', { params }).then((r) => r.data),
   detail: (id: number) => api.get(`/jobs/${id}/`).then((r) => r.data),
   match: (id: number) => api.get(`/matching/jobs/${id}/`).then((r) => r.data),
+  breakdown: (id: number) => api.post(`/jobs/${id}/breakdown/`).then((r) => r.data),
+  create: (payload: Record<string, unknown>) =>
+    api.post('/jobs/', payload).then((r) => r.data),
 };
 
 export const Applications = {
@@ -111,7 +114,7 @@ export const Tailoring = {
 };
 
 export const Interview = {
-  start: (payload: { role: string; stage: string; difficulty?: string; company?: number }) =>
+  start: (payload: { role: string; stage: string; difficulty?: string; company_name?: string }) =>
     api.post('/interview/sessions/', payload).then((r) => r.data),
   detail: (id: number) => api.get(`/interview/sessions/${id}/`).then((r) => r.data),
   answer: (id: number, answer: string) =>
@@ -148,6 +151,8 @@ export const Network = {
   contacts: {
     list: (params: Record<string, string | number> = {}) =>
       api.get('/networking/contacts/', { params }).then((r) => r.data),
+    get: (id: number) =>
+      api.get(`/networking/contacts/${id}/`).then((r) => r.data),
     create: (payload: Record<string, unknown>) =>
       api.post('/networking/contacts/', payload).then((r) => r.data),
     patch: (id: number, payload: Record<string, unknown>) =>

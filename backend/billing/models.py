@@ -9,6 +9,7 @@ class CreditLedger(models.Model):
         ('cover_letter', 'Drafted a cover letter'),
         ('autonomous_apply', 'Autonomous apply'),
         ('mock_interview', 'Mock interview'),
+        ('job_breakdown', 'AI job breakdown'),
         ('top_up', 'Manual top-up'),
         ('stripe_purchase', 'Stripe purchase'),
         ('refund', 'Refund'),

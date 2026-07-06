@@ -18,6 +18,7 @@ PRICING = {
     'cover_letter': 3,
     'mock_interview': 8,
     'autonomous_apply': 10,
+    'job_breakdown': 2,
 }
 
 # Human-facing catalogue used by the pricing endpoint and the in-app UI, so the
@@ -42,6 +43,14 @@ CATALOG = [
         'cost': PRICING['mock_interview'],
         'blurb': 'A company-researched question bank plus a live grilling round scored '
                  'against a STAR rubric, ending in a personalised study plan.',
+    },
+    {
+        'reason': 'job_breakdown',
+        'label': 'AI job breakdown',
+        'cost': PRICING['job_breakdown'],
+        'blurb': 'AI reads the posting and expands it into role-specific '
+                 'responsibilities, requirements, benefits and a company summary. '
+                 'Generated once per job, then free for everyone.',
     },
     {
         'reason': 'autonomous_apply',

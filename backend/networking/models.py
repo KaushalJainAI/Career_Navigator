@@ -59,11 +59,16 @@ class Contact(models.Model):
     name = models.CharField(max_length=255)
     title = models.CharField(max_length=255, blank=True)
     email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=32, blank=True)
     profile_url = models.URLField(blank=True)
     location = models.CharField(max_length=255, blank=True)
     source = models.CharField(max_length=32, choices=ContactSource.choices, default=ContactSource.MANUAL)
     seniority = models.CharField(max_length=64, blank=True)
     relationship_strength = models.PositiveSmallIntegerField(default=0)
+    # The relationship story, kept on the contact so it travels with the person.
+    how_we_met = models.TextField(blank=True)          # how you know each other / where you met
+    last_discussed = models.TextField(blank=True)      # what you talked about last time
+    last_contacted_at = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
     tags = models.JSONField(default=list, blank=True)
     raw = models.JSONField(default=dict, blank=True)
