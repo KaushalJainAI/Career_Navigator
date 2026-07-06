@@ -61,9 +61,20 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 
 class GoogleLoginSerializer(serializers.Serializer):
-    """Body of POST /auth/google/ — code from the OAuth callback."""
-    code = serializers.CharField(required=True)
-    redirect_uri = serializers.CharField(required=False, allow_blank=True)
+    """Body of POST /auth/google/ — a Google ID token from Google Identity
+    Services on the frontend. Accepts it under any of the common field names
+    (`credential` is what @react-oauth/google emits; NGU sends `access_token`)."""
+
+    credential = serializers.CharField(required=False, allow_blank=True)
+    id_token = serializers.CharField(required=False, allow_blank=True)
+    access_token = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        token = attrs.get('credential') or attrs.get('id_token') or attrs.get('access_token')
+        if not token:
+            raise serializers.ValidationError('A Google credential (ID token) is required.')
+        attrs['token'] = token
+        return attrs
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -108,10 +119,22 @@ class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
 
+class OTPVerifySerializer(serializers.Serializer):
+    """Step 2 of the OTP reset flow — check the emailed code."""
+    email = serializers.EmailField()
+    otp_code = serializers.CharField(min_length=4, max_length=10)
+
+
 class PasswordResetConfirmSerializer(serializers.Serializer):
-    uid = serializers.CharField()
-    token = serializers.CharField()
-    password = serializers.CharField(write_only=True, min_length=8)
+    """Step 3 — exchange the one-time reset_token (issued at verify) for a new
+    password. The raw OTP is never replayed here."""
+    email = serializers.EmailField()
+    reset_token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, min_length=8)
+
+    def validate_new_password(self, value):
+        validate_password(value)
+        return value
 
 
 class APITokenSerializer(serializers.ModelSerializer):

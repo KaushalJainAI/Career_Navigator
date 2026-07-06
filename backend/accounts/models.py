@@ -47,6 +47,49 @@ class GuestSession(models.Model):
     last_seen_at = models.DateTimeField(auto_now=True)
 
 
+class PasswordResetOTP(models.Model):
+    """Email OTP for password reset (ported from NGU).
+
+    The code is stored *hashed* (never plaintext), expires 10 minutes after
+    issue, and locks after ``MAX_FAILED_ATTEMPTS`` wrong guesses. Once verified,
+    a one-time ``reset_token`` is issued that the confirm step exchanges for a
+    password change — so the raw OTP is never replayed to set the password."""
+
+    MAX_FAILED_ATTEMPTS = 5
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='password_reset_otps'
+    )
+    otp_code = models.CharField(max_length=255)
+    reset_token = models.CharField(max_length=100, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    failed_attempts = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.user} OTP ({"used" if self.is_used else "pending"})'
+
+    def set_otp(self, raw_otp: str) -> None:
+        from django.contrib.auth.hashers import make_password
+        self.otp_code = make_password(raw_otp)
+
+    def check_otp(self, raw_otp: str) -> bool:
+        from django.contrib.auth.hashers import check_password
+        return check_password(raw_otp, self.otp_code)
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() > self.expires_at
+
+    @property
+    def is_locked(self) -> bool:
+        return self.failed_attempts >= self.MAX_FAILED_ATTEMPTS
+
+
 class APIToken(models.Model):
     """Long-lived, revocable API token for the MV3 browser extension and other
     non-browser clients. Only the SHA-256 hash is persisted — the cleartext is

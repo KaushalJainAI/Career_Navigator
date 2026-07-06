@@ -9,6 +9,7 @@ daphne>=4.1
 whitenoise>=6.6
 django-allauth>=0.61
 dj-rest-auth>=6.0
+google-auth>=2.28  # verify Google Identity Services ID tokens (accounts.oauth)
 django-celery-beat>=2.6
 celery>=5.4
 redis>=5.0

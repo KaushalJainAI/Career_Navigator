@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useJobsStore } from '../../stores/useJobsStore';
 import { useApplicationsStore } from '../../stores/useApplicationsStore';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, MapPin, Building, ChevronRight, SlidersHorizontal, ArrowUpDown, X, ListChecks, Hourglass, Plus } from 'lucide-react';
+import { Search, MapPin, Building, ChevronRight, SlidersHorizontal, ArrowUpDown, X, ListChecks, Hourglass, Plus, RefreshCw } from 'lucide-react';
 import { GhostRiskBadge } from '../../components/GhostRiskBadge';
 import { Jobs } from '../../api/endpoints';
 import { rejectionCooldown } from '../../lib/cooldown';
@@ -30,6 +30,27 @@ export function JobsList() {
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [hideGhost, setHideGhost] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMsg, setRefreshMsg] = useState('');
+
+  async function refreshJobs() {
+    setRefreshing(true);
+    setRefreshMsg('');
+    try {
+      const out = await Jobs.refresh();
+      setRefreshMsg(out.detail || 'Job sources refreshed.');
+      await fetch();
+    } catch (e) {
+      const err = e as { response?: { status?: number; data?: { detail?: string } } };
+      if (err.response?.status === 429) {
+        setRefreshMsg('You refreshed recently — give it a few minutes before trying again.');
+      } else {
+        setRefreshMsg(err.response?.data?.detail || 'Could not refresh right now. Please try again.');
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   useEffect(() => { fetch(); }, [fetch]);
   useEffect(() => { fetchApps().catch(() => undefined); }, [fetchApps]);
@@ -71,13 +92,30 @@ export function JobsList() {
           <h1 className="text-2xl font-bold tracking-tight text-slate-800">Discover Jobs</h1>
           <p className="text-slate-500 text-sm mt-1">Find and apply to positions matching your profile.</p>
         </div>
-        <button
-          onClick={() => setAdding(true)}
-          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white shadow-[0_4px_0_#2dd4bf] transition hover:bg-slate-800"
-        >
-          <Plus className="h-4 w-4" /> Add a job
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={refreshJobs}
+            disabled={refreshing}
+            title="Search the configured job sources for new postings"
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl border-2 border-slate-900 bg-white px-4 py-2.5 text-sm font-black text-slate-900 transition hover:bg-slate-50 disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Searching…' : 'Find new jobs'}
+          </button>
+          <button
+            onClick={() => setAdding(true)}
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-black text-white shadow-[0_4px_0_#2dd4bf] transition hover:bg-slate-800"
+          >
+            <Plus className="h-4 w-4" /> Add a job
+          </button>
+        </div>
       </div>
+
+      {refreshMsg && (
+        <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-semibold text-teal-800">
+          {refreshMsg}
+        </div>
+      )}
 
       {adding && <AddJobForm onClose={() => setAdding(false)} />}
 

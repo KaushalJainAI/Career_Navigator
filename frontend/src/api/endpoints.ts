@@ -7,32 +7,18 @@ export const Auth = {
     api.post('/auth/login/', { username: email, password }).then((r) => r.data),
   me: () => api.get('/auth/me/').then((r) => r.data),
   guestKey: () => api.post('/auth/guest-key/').then((r) => r.data),
-  google: (code: string, redirect_uri?: string) =>
-    api.post('/auth/google/', { code, redirect_uri }).then((r) => r.data),
+  // Google Identity Services returns a `credential` (an ID token) which the
+  // backend verifies locally; no redirect/callback needed.
+  google: (credential: string) =>
+    api.post('/auth/google/', { credential }).then((r) => r.data),
+  // Email-OTP password reset: request → verify → confirm.
   passwordReset: (email: string) =>
     api.post('/auth/password-reset/', { email }).then((r) => r.data),
-  passwordResetConfirm: (uid: string, token: string, password: string) =>
-    api.post('/auth/password-reset/confirm/', { uid, token, password }).then((r) => r.data),
+  passwordResetVerify: (email: string, otp_code: string) =>
+    api.post('/auth/password-reset/verify/', { email, otp_code }).then((r) => r.data),
+  passwordResetConfirm: (email: string, reset_token: string, new_password: string) =>
+    api.post('/auth/password-reset/confirm/', { email, reset_token, new_password }).then((r) => r.data),
 };
-
-/** Builds the front-channel Google OAuth URL. Google redirects back to
- *  redirect_uri with ?code=…; we POST that to /auth/google/ for JWTs. */
-export function buildGoogleAuthUrl(): string {
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
-  const redirectUri =
-    (import.meta.env.VITE_GOOGLE_REDIRECT_URI as string)
-    || `${window.location.origin}/auth/google/callback`;
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    response_type: 'code',
-    scope: 'openid email profile',
-    access_type: 'offline',
-    prompt: 'consent',
-    include_granted_scopes: 'true',
-  });
-  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-}
 
 export const Account = {
   update: (payload: { first_name?: string; last_name?: string; stealth_domains?: string[] }) =>
@@ -63,6 +49,7 @@ export const Jobs = {
     api.get('/jobs/', { params }).then((r) => r.data),
   detail: (id: number) => api.get(`/jobs/${id}/`).then((r) => r.data),
   match: (id: number) => api.get(`/matching/jobs/${id}/`).then((r) => r.data),
+  refresh: () => api.post('/jobs/refresh/').then((r) => r.data),
   breakdown: (id: number) => api.post(`/jobs/${id}/breakdown/`).then((r) => r.data),
   create: (payload: Record<string, unknown>) =>
     api.post('/jobs/', payload).then((r) => r.data),

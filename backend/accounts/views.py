@@ -1,25 +1,26 @@
+import random
 import secrets
+import uuid
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
-from django.utils.encoding import force_str
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from django.utils.encoding import force_bytes
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import APIToken, GuestSession
-from .oauth import GoogleOAuthError, GoogleOAuthProvider
+from .models import APIToken, GuestSession, PasswordResetOTP
+from .oauth import GoogleOAuthError, verify_google_id_token
 from .serializers import (
     AccountUpdateSerializer,
     APITokenSerializer,
     ChangePasswordSerializer,
     GoogleLoginSerializer,
+    OTPVerifySerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     RegisterSerializer,
@@ -76,46 +77,29 @@ class ChangePasswordView(APIView):
 
 
 class GoogleLoginView(APIView):
-    """Exchange a Google OAuth2 authorisation code for a JWT pair.
-    Creates the local user on first sign-in (post_save signal handles UserProfile)."""
+    """Verify a Google ID token (from Google Identity Services on the client) and
+    return a JWT pair, creating the local user on first sign-in (a post_save
+    signal handles UserProfile). Mirrors NGU's local id_token-verification flow."""
 
     permission_classes = [AllowAny]
-    # Tests inject a provider factory to bypass the network. Production uses
-    # the real `GoogleOAuthProvider`.
-    provider_factory = GoogleOAuthProvider
+    # Tests override this with a fake to bypass the network + google-auth.
+    verify_token = staticmethod(verify_google_id_token)
 
     def post(self, request):
         serializer = GoogleLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        code = serializer.validated_data['code']
-        redirect_uri = serializer.validated_data.get('redirect_uri') or settings.GOOGLE_OAUTH_REDIRECT_URI
-
-        provider = self.provider_factory(redirect_uri=redirect_uri)
         try:
-            token_data = provider.exchange_code(code)
+            idinfo = self.verify_token(serializer.validated_data['token'])
         except GoogleOAuthError as exc:
-            return Response({'detail': f'Token exchange failed: {exc}'},
-                            status=status.HTTP_400_BAD_REQUEST)
-        if not isinstance(token_data, dict) or 'error' in token_data:
-            err = token_data.get('error_description') if isinstance(token_data, dict) else 'Unknown OAuth error'
-            return Response({'detail': err or 'Unknown OAuth error'},
-                            status=status.HTTP_400_BAD_REQUEST)
-        access_token = token_data.get('access_token')
-        if not access_token:
-            return Response({'detail': 'No access_token in OAuth response.'},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': f'Invalid Google token: {exc}'},
+                            status=status.HTTP_401_UNAUTHORIZED)
 
-        try:
-            user_info = provider.get_user_info(access_token)
-        except Exception:  # noqa: BLE001
-            return Response({'detail': 'Failed to fetch user info from Google.'},
-                            status=status.HTTP_400_BAD_REQUEST)
-        email = (user_info or {}).get('email')
+        email = (idinfo or {}).get('email')
         if not email:
             return Response({'detail': 'No email returned by Google.'},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        user = self._get_or_create_user(email, user_info)
+        user, created = self._get_or_create_user(email.strip().lower(), idinfo)
         refresh = RefreshToken.for_user(user)
         return Response(
             {
@@ -123,27 +107,32 @@ class GoogleLoginView(APIView):
                 'access': str(refresh.access_token),
                 'refresh': str(refresh),
             },
-            status=status.HTTP_200_OK,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
     @staticmethod
-    def _get_or_create_user(email: str, user_info: dict):
+    def _get_or_create_user(email: str, idinfo: dict):
         User = get_user_model()
-        user = User.objects.filter(email=email).first()
+        # Match case-insensitively so a Google sign-in never forks a second
+        # account from an email that differs only in case.
+        user = User.objects.filter(email__iexact=email).first()
         if user is not None:
-            return user
+            return user, False
         base = email.split('@')[0]
         username = base
         counter = 1
         while User.objects.filter(username=username).exists():
             username = f'{base}{counter}'
             counter += 1
-        return User.objects.create_user(
+        user = User.objects.create_user(
             username=username,
             email=email,
-            first_name=user_info.get('given_name', ''),
-            last_name=user_info.get('family_name', ''),
+            first_name=idinfo.get('given_name', ''),
+            last_name=idinfo.get('family_name', ''),
         )
+        user.set_unusable_password()
+        user.save(update_fields=['password'])
+        return user, True
 
 
 class GuestKeyView(APIView):
@@ -200,7 +189,14 @@ class APITokenRevokeView(APIView):
         return Response({'ok': True, 'id': token.id})
 
 
+# --- Email-OTP password reset (ported from NGU): request → verify → confirm ---
+OTP_TTL_MINUTES = 10
+
+
 class PasswordResetRequestView(APIView):
+    """Step 1 — email a 6-digit OTP. Always returns the same generic message so
+    the endpoint can't be used to enumerate which emails have accounts."""
+
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -210,39 +206,96 @@ class PasswordResetRequestView(APIView):
         User = get_user_model()
         user = User.objects.filter(email__iexact=email, is_active=True).first()
         if user:
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            token = default_token_generator.make_token(user)
-            frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173').rstrip('/')
-            reset_url = f'{frontend_url}/reset-password?uid={uid}&token={token}'
+            otp_code = f'{random.randint(100000, 999999)}'
+            # Invalidate any earlier pending OTPs so only the newest works.
+            PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+            record = PasswordResetOTP(
+                user=user, expires_at=timezone.now() + timedelta(minutes=OTP_TTL_MINUTES)
+            )
+            record.set_otp(otp_code)
+            record.save()
             send_mail(
-                'Reset your Career Navigator password',
+                'Your Career Navigator password reset code',
                 (
-                    'You asked to reset your Career Navigator password.\n\n'
-                    f'Open this link to choose a new password: {reset_url}\n\n'
+                    f'Your password reset code is: {otp_code}\n\n'
+                    f'It expires in {OTP_TTL_MINUTES} minutes. '
                     'If you did not request this, you can ignore this email.'
                 ),
                 settings.DEFAULT_FROM_EMAIL,
                 [user.email],
                 fail_silently=True,
             )
-        return Response({'detail': 'If that email exists, a reset link has been sent.'})
+        return Response({'detail': 'If that email exists, a reset code has been sent.'})
+
+
+class PasswordResetVerifyView(APIView):
+    """Step 2 — verify the OTP and issue a one-time reset_token."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = OTPVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+        otp_code = serializer.validated_data['otp_code']
+
+        User = get_user_model()
+        user = User.objects.filter(email__iexact=email, is_active=True).first()
+        record = (
+            PasswordResetOTP.objects.filter(user=user, is_used=False).first()
+            if user else None
+        )
+        if record is None:
+            return Response({'detail': 'Invalid or expired code.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if record.is_expired:
+            return Response({'detail': 'This code has expired. Please request a new one.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if record.is_locked:
+            return Response({'detail': 'Too many failed attempts. Please request a new code.'},
+                            status=status.HTTP_429_TOO_MANY_REQUESTS)
+        if not record.check_otp(otp_code):
+            record.failed_attempts += 1
+            record.save(update_fields=['failed_attempts'])
+            remaining = PasswordResetOTP.MAX_FAILED_ATTEMPTS - record.failed_attempts
+            if remaining > 0:
+                return Response({'detail': f'Invalid code. {remaining} attempt(s) remaining.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Too many failed attempts. Please request a new code.'},
+                            status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        record.is_used = True
+        record.reset_token = uuid.uuid4().hex
+        record.save(update_fields=['is_used', 'reset_token'])
+        return Response({'detail': 'Code verified.', 'reset_token': record.reset_token})
 
 
 class PasswordResetConfirmView(APIView):
+    """Step 3 — exchange the verified reset_token for a new password."""
+
     permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = PasswordResetConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
-            uid = force_str(urlsafe_base64_decode(serializer.validated_data['uid']))
-            user = get_user_model().objects.get(pk=uid, is_active=True)
-        except Exception:  # noqa: BLE001
-            return Response({'detail': 'Invalid reset link.'}, status=status.HTTP_400_BAD_REQUEST)
+        email = serializer.validated_data['email']
+        reset_token = serializer.validated_data['reset_token']
 
-        if not default_token_generator.check_token(user, serializer.validated_data['token']):
-            return Response({'detail': 'Invalid or expired reset link.'}, status=status.HTTP_400_BAD_REQUEST)
+        User = get_user_model()
+        user = User.objects.filter(email__iexact=email, is_active=True).first()
+        record = (
+            PasswordResetOTP.objects.filter(
+                user=user, reset_token=reset_token, is_used=True
+            ).first()
+            if user else None
+        )
+        if record is None or record.is_expired:
+            return Response({'detail': 'Invalid or expired reset session. Please start over.'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-        user.set_password(serializer.validated_data['password'])
+        user.set_password(serializer.validated_data['new_password'])
         user.save(update_fields=['password'])
+        # Burn the token so it can't be replayed.
+        record.reset_token = None
+        record.save(update_fields=['reset_token'])
         return Response({'detail': 'Password updated. You can sign in now.'})

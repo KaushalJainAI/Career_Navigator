@@ -1,15 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, CheckCircle2, Globe2, Lock, Mail, Sparkles, Target } from 'lucide-react';
-import { buildGoogleAuthUrl } from '../../api/endpoints';
+import { ArrowRight, CheckCircle2, Lock, Mail, Sparkles, Target } from 'lucide-react';
+import { GoogleLogin } from '@react-oauth/google';
 import { useAuthStore } from '../../stores/useAuthStore';
 
 export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [notice, setNotice] = useState('');
-  const { login, register, requestPasswordReset, error, loading } = useAuthStore();
+  const { login, register, loginWithGoogle, error, loading } = useAuthStore();
   const navigate = useNavigate();
 
   async function onSubmit(e: React.FormEvent) {
@@ -23,14 +22,10 @@ export function Login() {
     }
   }
 
-  async function onForgotPassword() {
-    if (!email) {
-      setNotice('Enter your email first and we will send the reset link.');
-      return;
-    }
+  async function onGoogleCredential(credential: string) {
     try {
-      const message = await requestPasswordReset(email);
-      setNotice(message);
+      await loginWithGoogle(credential);
+      navigate('/');
     } catch {
       return;
     }
@@ -103,7 +98,6 @@ export function Login() {
             </div>
 
             {error && <div className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div>}
-            {notice && <div className="mt-4 rounded-2xl bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-800">{notice}</div>}
 
             <button className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 font-black text-white shadow-[0_12px_0_#14b8a6] transition hover:-translate-y-0.5 disabled:opacity-60" disabled={loading}>
               {loading ? 'Working...' : mode === 'login' ? 'Log in and move' : 'Create account'}
@@ -114,21 +108,23 @@ export function Login() {
               <button type="button" className="text-slate-600 hover:text-slate-950" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>
                 {mode === 'login' ? 'Need an account?' : 'Have an account?'}
               </button>
-              <button type="button" className="text-teal-700 hover:text-teal-900" onClick={onForgotPassword}>
+              <Link to="/reset-password" className="text-teal-700 hover:text-teal-900">
                 Forgot password?
-              </button>
+              </Link>
             </div>
 
             <div className="my-6 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
               <span className="h-px flex-1 bg-slate-200" /> or <span className="h-px flex-1 bg-slate-200" />
             </div>
-            <button type="button" className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 font-black text-slate-800 hover:bg-slate-50" onClick={() => { window.location.href = buildGoogleAuthUrl(); }}>
-              <Globe2 className="h-5 w-5" />
-              Continue with Google
-            </button>
-            <Link className="mt-5 block text-center text-xs font-semibold text-slate-500" to="/reset-password">
-              Already have a reset link?
-            </Link>
+            <div className="flex justify-center">
+              <GoogleLogin
+                onSuccess={(cred) => cred.credential && onGoogleCredential(cred.credential)}
+                onError={() => useAuthStore.setState({ error: 'Google sign-in was cancelled or failed.' })}
+                text={mode === 'login' ? 'signin_with' : 'signup_with'}
+                shape="pill"
+                width="320"
+              />
+            </div>
           </form>
         </section>
       </main>

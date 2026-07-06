@@ -185,6 +185,7 @@ REST_FRAMEWORK = {
         'guest_chat': '30/hour',
         'tailoring': '60/hour',
         'autonomous_apply': '20/hour',
+        'job_refresh': '6/hour',  # user-triggered ingestion refresh — protects source API quotas
     },
 }
 

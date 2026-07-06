@@ -32,3 +32,11 @@ def run_source(source_name: str, **kwargs):
     ctx = AdapterContext(**kwargs) if kwargs else AdapterContext()
     run = run_adapter(source, adapter, ctx)
     return {'run_id': run.id, 'status': run.status, 'stats': run.stats}
+
+
+@shared_task(name='ingestion.run_all_sources')
+def run_all_sources(**kwargs):
+    """Run every registered API adapter once — the async path behind the
+    user-facing 'find new jobs' refresh."""
+    from .services import run_registered_sources
+    return run_registered_sources(**kwargs)

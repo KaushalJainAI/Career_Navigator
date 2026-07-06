@@ -23,6 +23,21 @@ class GoogleOAuthError(Exception):
     """Raised on transport / OAuth provider failures."""
 
 
+def verify_google_id_token(token: str, *, audience: str | None = None) -> dict:
+    """Verify a Google-issued ID token locally (signature, issuer, audience,
+    expiry) and return its claims. Raises :class:`GoogleOAuthError` on any
+    failure. `google-auth` is imported lazily so it's only required when a real
+    verification actually runs (tests inject a fake verifier)."""
+    from google.auth.transport import requests as google_requests
+    from google.oauth2 import id_token as google_id_token
+
+    audience = audience if audience is not None else settings.GOOGLE_OAUTH_CLIENT_ID
+    try:
+        return google_id_token.verify_oauth2_token(token, google_requests.Request(), audience)
+    except ValueError as exc:
+        raise GoogleOAuthError(str(exc)) from exc
+
+
 class GoogleOAuthProvider:
     AUTHORIZATION_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
     TOKEN_URL = 'https://oauth2.googleapis.com/token'

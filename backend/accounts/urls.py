@@ -10,6 +10,7 @@ from .views import (
     MeView,
     PasswordResetConfirmView,
     PasswordResetRequestView,
+    PasswordResetVerifyView,
     RegisterView,
 )
 
@@ -22,6 +23,7 @@ urlpatterns = [
     path('google/', GoogleLoginView.as_view(), name='auth-google'),
     path('guest-key/', GuestKeyView.as_view(), name='auth-guest-key'),
     path('password-reset/', PasswordResetRequestView.as_view(), name='auth-password-reset'),
+    path('password-reset/verify/', PasswordResetVerifyView.as_view(), name='auth-password-reset-verify'),
     path('password-reset/confirm/', PasswordResetConfirmView.as_view(), name='auth-password-reset-confirm'),
     path('api-tokens/', APITokenListCreateView.as_view(), name='auth-api-tokens'),
     path('api-tokens/<int:pk>/revoke/', APITokenRevokeView.as_view(), name='auth-api-token-revoke'),

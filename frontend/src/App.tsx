@@ -11,7 +11,6 @@ import { ContactDetailPage } from './routes/network/ContactDetailPage';
 import { InterviewGrill } from './routes/interview/InterviewGrill';
 import { Login } from './routes/auth/Login';
 import { ResetPassword } from './routes/auth/ResetPassword';
-import { GoogleCallback } from './routes/auth/GoogleCallback';
 import { ApiTokensPage } from './routes/settings/ApiTokens';
 import { BillingPage } from './routes/settings/BillingPage';
 import { SettingsPage } from './routes/settings/SettingsPage';
@@ -386,7 +385,6 @@ export default function App() {
           <Routes>
             <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/auth/google/callback" element={<GoogleCallback />} />
             <Route path="/onboarding" element={<ProtectedRoute initialized={initialized} user={user}><Onboarding /></ProtectedRoute>} />
             <Route
               path="/"

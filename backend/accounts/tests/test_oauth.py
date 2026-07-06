@@ -77,45 +77,37 @@ def test_get_user_info_sends_bearer_header():
 
 
 # ────────────────────────── view integration tests ─────────────────────
+# The view verifies a Google ID token via `GoogleLoginView.verify_token`; tests
+# swap that for a fake so we never call google-auth or the network.
 
-class _FakeProvider:
-    """Stand-in injected into GoogleLoginView so tests skip the network."""
+def _fake_verifier(idinfo=None, *, raise_exc=None):
+    info = idinfo or {'email': 'alice@example.com', 'given_name': 'Alice', 'family_name': 'X'}
 
-    def __init__(self, *, exchange=None, user_info=None, on_exchange_raise=None):
-        self._exchange = exchange or {'access_token': 'AT'}
-        self._info = user_info or {'email': 'alice@example.com',
-                                   'given_name': 'Alice', 'family_name': 'X'}
-        self._raise = on_exchange_raise
-
-    def __call__(self, *_args, **_kwargs):  # acts as provider_factory(redirect_uri=...)
-        return self
-
-    def exchange_code(self, code):
-        if self._raise:
-            raise self._raise
-        return self._exchange
-
-    def get_user_info(self, access_token):
-        return self._info
+    def verify(_token):
+        if raise_exc:
+            raise raise_exc
+        return info
+    return staticmethod(verify)
 
 
 @pytest.fixture(autouse=True)
-def restore_provider_factory():
-    original = GoogleLoginView.provider_factory
+def restore_verify_token():
+    original = GoogleLoginView.verify_token
     yield
-    GoogleLoginView.provider_factory = original
+    GoogleLoginView.verify_token = original
 
 
 @pytest.mark.django_db
 def test_google_login_creates_user_and_returns_jwt(api_client):
-    GoogleLoginView.provider_factory = _FakeProvider()
-    resp = api_client.post(reverse('auth-google'), {'code': 'abc'}, format='json')
-    assert resp.status_code == 200
+    GoogleLoginView.verify_token = _fake_verifier()
+    resp = api_client.post(reverse('auth-google'), {'credential': 'tok'}, format='json')
+    assert resp.status_code == 201
     assert 'access' in resp.data and 'refresh' in resp.data
     assert resp.data['user']['email'] == 'alice@example.com'
     User = get_user_model()
     user = User.objects.get(email='alice@example.com')
     assert user.first_name == 'Alice'
+    assert not user.has_usable_password()  # OAuth-only account
     assert hasattr(user, 'cn_profile')  # signal created the profile
 
 
@@ -123,48 +115,41 @@ def test_google_login_creates_user_and_returns_jwt(api_client):
 def test_google_login_existing_user_returns_jwt_without_duplicating(api_client):
     User = get_user_model()
     User.objects.create_user(username='alice', email='alice@example.com', password='x')
-    GoogleLoginView.provider_factory = _FakeProvider()
-    resp = api_client.post(reverse('auth-google'), {'code': 'abc'}, format='json')
+    GoogleLoginView.verify_token = _fake_verifier()
+    # NGU sends the credential under `access_token`; we accept it too.
+    resp = api_client.post(reverse('auth-google'), {'access_token': 'tok'}, format='json')
     assert resp.status_code == 200
     assert User.objects.filter(email='alice@example.com').count() == 1
 
 
 @pytest.mark.django_db
-def test_google_login_400_on_oauth_error(api_client):
-    GoogleLoginView.provider_factory = _FakeProvider(
-        exchange={'error': 'invalid_grant', 'error_description': 'bad code'}
-    )
-    resp = api_client.post(reverse('auth-google'), {'code': 'abc'}, format='json')
-    assert resp.status_code == 400
-    assert 'bad code' in resp.data['detail']
+def test_google_login_401_on_invalid_token(api_client):
+    GoogleLoginView.verify_token = _fake_verifier(raise_exc=GoogleOAuthError('bad audience'))
+    resp = api_client.post(reverse('auth-google'), {'credential': 'tok'}, format='json')
+    assert resp.status_code == 401
+    assert 'invalid google token' in resp.data['detail'].lower()
+
+
+@pytest.mark.django_db
+def test_google_login_400_on_missing_credential(api_client):
+    resp = api_client.post(reverse('auth-google'), {}, format='json')
+    assert resp.status_code == 400  # serializer rejects: no token supplied
 
 
 @pytest.mark.django_db
 def test_google_login_400_on_missing_email(api_client):
-    GoogleLoginView.provider_factory = _FakeProvider(
-        user_info={'given_name': 'A', 'family_name': 'B'}
-    )
-    resp = api_client.post(reverse('auth-google'), {'code': 'abc'}, format='json')
+    GoogleLoginView.verify_token = _fake_verifier({'given_name': 'A', 'family_name': 'B'})
+    resp = api_client.post(reverse('auth-google'), {'credential': 'tok'}, format='json')
     assert resp.status_code == 400
     assert 'email' in resp.data['detail'].lower()
-
-
-@pytest.mark.django_db
-def test_google_login_400_on_exchange_exception(api_client):
-    GoogleLoginView.provider_factory = _FakeProvider(
-        on_exchange_raise=GoogleOAuthError('network down')
-    )
-    resp = api_client.post(reverse('auth-google'), {'code': 'abc'}, format='json')
-    assert resp.status_code == 400
-    assert 'Token exchange failed' in resp.data['detail']
 
 
 @pytest.mark.django_db
 def test_google_login_handles_username_collision(api_client):
     User = get_user_model()
     User.objects.create_user(username='alice', email='someone-else@x.com', password='x')
-    GoogleLoginView.provider_factory = _FakeProvider()
-    resp = api_client.post(reverse('auth-google'), {'code': 'abc'}, format='json')
-    assert resp.status_code == 200
+    GoogleLoginView.verify_token = _fake_verifier()
+    resp = api_client.post(reverse('auth-google'), {'credential': 'tok'}, format='json')
+    assert resp.status_code == 201
     user = User.objects.get(email='alice@example.com')
     assert user.username == 'alice1'

@@ -82,6 +82,32 @@ def upsert_postings(source: Source, postings: list[dict]) -> dict:
     return {'created': created, 'updated': updated, 'skipped': skipped}
 
 
+def run_registered_sources(**ctx_kwargs) -> dict:
+    """Run every API adapter in the registry once and upsert their postings.
+
+    Powers the user-facing "find new jobs" refresh. Each adapter is isolated —
+    one failing (or unconfigured: adapters with no API key yield nothing) never
+    aborts the rest. Aggregates created/updated/skipped plus a per-source status.
+    """
+    # Imported here to avoid a circular import (tasks imports this module).
+    from .adapters.base import AdapterContext
+    from .tasks import ADAPTER_REGISTRY
+
+    totals = {'created': 0, 'updated': 0, 'skipped': 0, 'sources': {}}
+    ctx = AdapterContext(**ctx_kwargs) if ctx_kwargs else None
+    for name, adapter_cls in ADAPTER_REGISTRY.items():
+        adapter = adapter_cls()
+        source, _ = Source.objects.get_or_create(
+            name=name, defaults={'kind': getattr(adapter, 'source_kind', 'aggregator')}
+        )
+        run = run_adapter(source, adapter, ctx)
+        totals['sources'][name] = run.status
+        for key in ('created', 'updated', 'skipped'):
+            totals[key] += (run.stats or {}).get(key, 0)
+    totals['new_jobs'] = totals['created']
+    return totals
+
+
 def run_adapter(source: Source, adapter, ctx=None) -> IngestionRun:
     run = IngestionRun.objects.create(source=source)
     try:

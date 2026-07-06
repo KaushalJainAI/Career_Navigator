@@ -1,8 +1,11 @@
-from rest_framework import filters, generics
+from rest_framework import filters, generics, status
 from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
+
+from django.conf import settings
 
 from ai.providers import configured_model_label, get_configured_llm
 from billing.pricing import cost_of
@@ -51,6 +54,42 @@ class JobDetailView(generics.RetrieveAPIView):
     queryset = JobPosting.objects.select_related('company', 'source')
     serializer_class = JobPostingSerializer
     permission_classes = [IsAuthenticated]
+
+
+class JobRefreshView(APIView):
+    """User-triggered "find new jobs": re-run the configured ingestion sources.
+
+    Hits external job-board APIs, so it's rate-limited per user (see the
+    `job_refresh` throttle scope) to protect those quotas — no credit charge,
+    discovery stays free. In async deployments it dispatches to Celery and
+    returns immediately; otherwise it runs inline and returns the counts."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'job_refresh'
+
+    def post(self, request):
+        if getattr(settings, 'RUN_INGESTION_ASYNC', False):
+            from ingestion.tasks import run_all_sources
+            run_all_sources.delay()
+            return Response(
+                {'status': 'started',
+                 'detail': 'Searching job sources — new roles will appear shortly.'},
+                status=status.HTTP_202_ACCEPTED,
+            )
+        from ingestion.services import run_registered_sources
+        totals = run_registered_sources()
+        new_jobs = totals.get('new_jobs', 0)
+        return Response({
+            'status': 'done',
+            'new_jobs': new_jobs,
+            'updated': totals.get('updated', 0),
+            'sources': totals.get('sources', {}),
+            'detail': (
+                f'Found {new_jobs} new job{"" if new_jobs == 1 else "s"}.'
+                if new_jobs else 'No new jobs right now — check back later.'
+            ),
+        })
 
 
 class JobBreakdownView(APIView):

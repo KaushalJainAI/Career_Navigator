@@ -17,9 +17,10 @@ interface AuthState {
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: (code: string, redirectUri?: string) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<string>;
-  confirmPasswordReset: (uid: string, token: string, password: string) => Promise<string>;
+  verifyPasswordResetOtp: (email: string, otpCode: string) => Promise<string>;
+  confirmPasswordReset: (email: string, resetToken: string, password: string) => Promise<string>;
   logout: () => void;
   refresh: () => Promise<void>;
   setUser: (user: User) => void;
@@ -57,10 +58,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       throw new Error(message);
     }
   },
-  loginWithGoogle: async (code, redirectUri) => {
+  loginWithGoogle: async (credential) => {
     set({ loading: true, error: null });
     try {
-      const out = await Auth.google(code, redirectUri);
+      const out = await Auth.google(credential);
       localStorage.setItem('cn_access', out.access);
       localStorage.setItem('cn_refresh', out.refresh);
       set({ user: out.user, loading: false });
@@ -81,10 +82,21 @@ export const useAuthStore = create<AuthState>((set) => ({
       throw e;
     }
   },
-  confirmPasswordReset: async (uid, token, password) => {
+  verifyPasswordResetOtp: async (email, otpCode) => {
     set({ loading: true, error: null });
     try {
-      const out = await Auth.passwordResetConfirm(uid, token, password);
+      const out = await Auth.passwordResetVerify(email, otpCode);
+      set({ loading: false });
+      return out.reset_token as string;
+    } catch (e) {
+      set({ error: getErrorMessage(e), loading: false });
+      throw e;
+    }
+  },
+  confirmPasswordReset: async (email, resetToken, password) => {
+    set({ loading: true, error: null });
+    try {
+      const out = await Auth.passwordResetConfirm(email, resetToken, password);
       set({ loading: false });
       return out.detail;
     } catch (e) {
