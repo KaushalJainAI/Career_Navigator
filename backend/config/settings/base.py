@@ -244,7 +244,27 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
+# Periodic ingestion — the whole point of a job-alert product is that new roles
+# arrive without anyone pressing a button. DatabaseScheduler syncs this dict
+# into django_celery_beat's tables on startup, so entries stay editable in the
+# admin afterwards. Requires a running `celery -A config beat` + worker.
+INGESTION_REFRESH_MINUTES = int(os.environ.get('INGESTION_REFRESH_MINUTES', '180'))
+CELERY_BEAT_SCHEDULE = {
+    'refresh-job-sources': {
+        'task': 'ingestion.run_all_sources',
+        'schedule': timedelta(minutes=INGESTION_REFRESH_MINUTES),
+        # Source APIs are rate-limited and a run can outlive its interval;
+        # drop a tick rather than stacking duplicate runs.
+        'options': {'expires': INGESTION_REFRESH_MINUTES * 60},
+    },
+}
+
 RUN_INGESTION_ASYNC = os.environ.get('RUN_INGESTION_ASYNC', 'False') == 'True'
+
+# On first view of a posting, fetch the real JD from its apply_url because
+# aggregator descriptions are truncated teasers (see jobs/description.py).
+# Adds one outbound request per posting, once — set False to disable.
+FETCH_FULL_DESCRIPTIONS = os.environ.get('FETCH_FULL_DESCRIPTIONS', 'True') == 'True'
 
 # Encryption key for credentials vault (AES-GCM)
 CREDENTIAL_ENCRYPTION_KEY = os.environ.get(
@@ -326,6 +346,11 @@ ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
 ACCOUNT_EMAIL_VERIFICATION = 'none'
 
 EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'localhost')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '25'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'False') == 'True'
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'no-reply@career-navigator.local')
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
 

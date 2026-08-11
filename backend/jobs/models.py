@@ -52,7 +52,12 @@ class JobPosting(models.Model):
     external_id = models.CharField(max_length=255, db_index=True)
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='jobs')
     title = models.CharField(max_length=255, db_index=True)
+    # As supplied by the source — an aggregator teaser, often hard-truncated
+    # (Adzuna caps at 500 chars). Prefer `best_description` when reasoning.
     description = models.TextField(blank=True)
+    # Full JD scraped from apply_url on first view; see jobs/description.py.
+    full_description = models.TextField(blank=True)
+    full_description_fetched_at = models.DateTimeField(null=True, blank=True)
     location = models.CharField(max_length=255, blank=True, db_index=True)
     remote = models.BooleanField(default=False)
     salary_min = models.IntegerField(null=True, blank=True)
@@ -87,3 +92,10 @@ class JobPosting(models.Model):
 
     def __str__(self) -> str:
         return f'{self.title} @ {self.company}'
+
+    @property
+    def best_description(self) -> str:
+        """The fullest JD text available — scraped page if we have it, else
+        the source teaser. Every consumer that reasons about the role
+        (matching, tailoring, breakdown, interview prep) should use this."""
+        return self.full_description or self.description

@@ -20,7 +20,7 @@ class JobMatchView(APIView):
             Resume.objects.filter(user=request.user).order_by('-created_at').first()
         if master is None or not master.parsed_json:
             return Response({'detail': 'Upload and parse a resume first.'}, status=400)
-        result = score_resume_against_job(master.parsed_json, job.title, job.description)
+        result = score_resume_against_job(master.parsed_json, job.title, job.best_description)
         score, _ = MatchScore.objects.update_or_create(
             user=request.user, job=job,
             defaults={

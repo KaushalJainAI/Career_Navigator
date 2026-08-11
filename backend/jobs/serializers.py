@@ -23,6 +23,7 @@ class JobPostingSerializer(serializers.ModelSerializer):
     company = CompanySerializer(read_only=True)
     source = SourceSerializer(read_only=True)
     ghost_band = serializers.SerializerMethodField()
+    has_full_description = serializers.SerializerMethodField()
 
     class Meta:
         model = JobPosting
@@ -30,6 +31,10 @@ class JobPostingSerializer(serializers.ModelSerializer):
 
     def get_ghost_band(self, obj) -> str:
         return band_for(obj.ghost_risk)
+
+    def get_has_full_description(self, obj) -> bool:
+        """False means the text shown is the source's truncated teaser."""
+        return bool(obj.full_description)
 
 
 class JobPostingWriteSerializer(serializers.ModelSerializer):

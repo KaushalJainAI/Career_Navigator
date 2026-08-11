@@ -36,7 +36,7 @@ def score_match(*, resume_id: int, job_id: int):
 
     resume = Resume.objects.get(pk=resume_id)
     job = JobPosting.objects.get(pk=job_id)
-    return score_resume_against_job(resume.parsed_json or {}, job.title, job.description)
+    return score_resume_against_job(resume.parsed_json or {}, job.title, job.best_description)
 
 
 @tool('find_referral_contacts', description='Rank the user contacts most relevant for a job referral.',

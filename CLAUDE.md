@@ -101,6 +101,13 @@ Despite `faiss-cpu` and `sentence-transformers` being in `backend/requirements.t
 
 `config/urls.py` mounts every app under `api/v1/<app>/`. Browser extension talks to `/api/v1/ext/...`. WebSockets live at `/ws/notifications/` and `/ws/interview/<id>/` (routing in `streaming/routing.py`).
 
+The full endpoint map — every route with its app, purpose, access, complexity, test
+coverage, serializer, DB tables, atomicity, and gotchas — is
+[docs/API.md](docs/API.md). It's the intended starting point for reviewing the backend
+surface. ⚠ **Keep it current**: whenever you add/remove/change a route (any `urls.py`),
+its permission, or its serializer, update the matching row in `docs/API.md` in the same
+commit — same discipline as the per-app tests policy below.
+
 ## Testing policy
 
 Every Django app ships unit tests under `<app>/tests/test_*.py` in the same commit as the code. Pytest config auto-discovers them. Tests must not require external network — adapters use injectable HTTP clients (`httpx.MockTransport`), LLM-using code uses injectable `llm=` callables, and the Google OAuth view has a `provider_factory` injection point used by `accounts/tests/test_oauth.py`. Frontend tests live under `frontend/src/**/__tests__/` and run via `vitest`.

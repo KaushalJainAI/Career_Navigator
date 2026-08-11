@@ -142,3 +142,55 @@ def test_repost_under_new_id_raises_ghost_risk():
     assert repost.repost_count >= 1
     assert repost.ghost_risk >= 50  # 30 repost + 20 missing salary
     assert any('reposted' in r.lower() for r in repost.ghost_reasons)
+
+
+def _mock_adapter(*, status_code=200, payload=None):
+    """A Lever adapter wired to a canned HTTP response."""
+    def handler(request):
+        return httpx.Response(status_code, json=payload if payload is not None else [])
+    return LeverAdapter(tokens=['acme'], transport=httpx.MockTransport(handler))
+
+
+def test_run_adapter_marks_failed_when_source_errors_and_yields_nothing():
+    """A dead API key must not look like 'no new jobs'.
+
+    Adapters swallow per-request failures by design; the run status is the
+    only place the failure can surface."""
+    source = Source.objects.create(name='lever', kind='ats')
+    run = run_adapter(source, _mock_adapter(status_code=404))
+    assert run.status == 'failed'
+    assert 'HTTP 404' in run.error
+    assert JobPosting.objects.count() == 0
+
+
+def test_run_adapter_marks_success_when_source_is_merely_empty():
+    """No error + no postings is a legitimate 'nothing new', not a failure."""
+    source = Source.objects.create(name='lever', kind='ats')
+    run = run_adapter(source, _mock_adapter(payload=[]))
+    assert run.status == 'success'
+    assert run.error == ''
+
+
+def test_run_registered_sources_reports_per_source_errors(monkeypatch):
+    from ingestion import services
+
+    monkeypatch.setattr(
+        'ingestion.tasks.ADAPTER_REGISTRY',
+        {'lever': lambda: _mock_adapter(status_code=500)},
+    )
+    totals = services.run_registered_sources()
+    assert totals['sources']['lever'] == 'failed'
+    assert 'HTTP 500' in totals['errors']['lever']
+
+
+def test_parse_iso_dt_returns_aware_datetime_for_naive_input():
+    """Jooble's `updated` carries no offset; a naive value would be stored
+    under USE_TZ with an implicit-UTC guess and corrupt ghost-risk ageing."""
+    from ingestion.adapters.base import parse_iso_dt
+
+    naive = parse_iso_dt('2026-07-27T13:54:29.557')
+    assert naive is not None and naive.tzinfo is not None
+    aware = parse_iso_dt('2026-07-27T13:54:29Z')
+    assert aware is not None and aware.tzinfo is not None
+    assert parse_iso_dt('') is None
+    assert parse_iso_dt('not-a-date') is None

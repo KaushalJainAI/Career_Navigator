@@ -51,9 +51,23 @@ class JobListView(generics.ListCreateAPIView):
 
 
 class JobDetailView(generics.RetrieveAPIView):
+    """Job detail — also the point where we upgrade the teaser to the real JD.
+
+    Aggregator descriptions are truncated (Adzuna at exactly 500 chars), so the
+    first time anyone opens a posting we fetch its apply_url and cache the full
+    text on the row. Best-effort and fire-once: a fetch failure just leaves the
+    teaser in place and is never retried."""
+
     queryset = JobPosting.objects.select_related('company', 'source')
     serializer_class = JobPostingSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        job = super().get_object()
+        if getattr(settings, 'FETCH_FULL_DESCRIPTIONS', True):
+            from .description import ensure_full_description
+            ensure_full_description(job)
+        return job
 
 
 class JobRefreshView(APIView):
@@ -80,15 +94,21 @@ class JobRefreshView(APIView):
         from ingestion.services import run_registered_sources
         totals = run_registered_sources()
         new_jobs = totals.get('new_jobs', 0)
+        errors = totals.get('errors', {})
+        if new_jobs:
+            detail = f'Found {new_jobs} new job{"" if new_jobs == 1 else "s"}.'
+        else:
+            detail = 'No new jobs right now — check back later.'
+        # A broken source must not read as "nothing new" — say which failed.
+        if errors:
+            detail += f' {len(errors)} source{"" if len(errors) == 1 else "s"} failed: '                       f'{", ".join(sorted(errors))}.'
         return Response({
             'status': 'done',
             'new_jobs': new_jobs,
             'updated': totals.get('updated', 0),
             'sources': totals.get('sources', {}),
-            'detail': (
-                f'Found {new_jobs} new job{"" if new_jobs == 1 else "s"}.'
-                if new_jobs else 'No new jobs right now — check back later.'
-            ),
+            'errors': errors,
+            'detail': detail,
         })
 
 
@@ -115,7 +135,7 @@ class JobBreakdownView(APIView):
 
         charge(request.user, 'job_breakdown', meta={'job': job.id})  # 402 if broke
         breakdown = generate_breakdown(
-            job.title, job.company.name, job.description, llm=llm)
+            job.title, job.company.name, job.best_description, llm=llm)
         if not breakdown:
             grant(request.user, 'refund', cost_of('job_breakdown'),
                   meta={'job': job.id, 'note': 'job_breakdown generation failed'})

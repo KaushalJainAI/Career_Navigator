@@ -9,7 +9,8 @@ class IngestionRun(models.Model):
     finished_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
         max_length=16,
-        choices=[('running', 'running'), ('success', 'success'), ('failed', 'failed')],
+        choices=[('running', 'running'), ('success', 'success'),
+                 ('partial', 'partial'), ('failed', 'failed')],
         default='running',
     )
     stats = models.JSONField(default=dict, blank=True)

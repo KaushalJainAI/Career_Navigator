@@ -25,7 +25,10 @@ Resilience rules shared by all adapters:
 - every adapter accepts an injectable `transport` so tests use
   `httpx.MockTransport` and live runs get connect retries for free;
 - a failed page/board request is logged and yields nothing instead of
-  aborting the whole run, so one bad source unit cannot poison the rest;
+  aborting the whole run, so one bad source unit cannot poison the rest.
+  Each failure is also recorded on `adapter.request_errors` so the caller
+  can tell "the source is broken" apart from "the source had no new jobs" —
+  `run_adapter` turns a non-empty list into a `partial`/`failed` run;
 - request failures are logged without the URL, because source URLs can
   embed API keys (e.g. Jooble).
 """
@@ -64,11 +67,15 @@ class BaseAdapter:
 
     def __init__(self, transport: httpx.BaseTransport | None = None):
         self.transport = transport
+        # Request failures seen during the current run(). Populated by
+        # _request_json; read by ingestion.services.run_adapter.
+        self.request_errors: list[str] = []
 
     def fetch(self, ctx: AdapterContext) -> Iterable[dict]:  # pragma: no cover - abstract
         raise NotImplementedError
 
     def run(self, ctx: AdapterContext | None = None) -> list[dict]:
+        self.request_errors = []
         return list(self.fetch(ctx or AdapterContext()))
 
     def http_client(self, **kwargs) -> httpx.Client:
@@ -88,11 +95,15 @@ class BaseAdapter:
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as exc:
-            logger.warning('%s: source API returned HTTP %s',
-                           self.source_name, exc.response.status_code)
+            # Never include the URL: source URLs can embed API keys (Jooble).
+            self._record_error(f'HTTP {exc.response.status_code}')
         except (httpx.HTTPError, ValueError) as exc:
-            logger.warning('%s: request failed: %s', self.source_name, type(exc).__name__)
+            self._record_error(type(exc).__name__)
         return None
+
+    def _record_error(self, detail: str) -> None:
+        logger.warning('%s: request failed: %s', self.source_name, detail)
+        self.request_errors.append(detail)
 
 
 def make_posting(*, external_id, title, description='', location='', remote=False,
@@ -138,12 +149,21 @@ def to_int(val) -> int | None:
 
 
 def parse_iso_dt(val) -> datetime | None:
+    """Parse an ISO-8601 string into an aware UTC datetime.
+
+    Sources are inconsistent about offsets (Jooble's `updated` carries none),
+    and a naive value would be stored under Django's USE_TZ with a warning and
+    an implicit-UTC guess. Ghost-risk scoring keys off posting age, so assume
+    UTC explicitly rather than letting it happen silently."""
     if not val:
         return None
     try:
-        return datetime.fromisoformat(str(val).replace('Z', '+00:00'))
+        parsed = datetime.fromisoformat(str(val).replace('Z', '+00:00'))
     except ValueError:
         return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def parse_epoch_ms(val) -> datetime | None:

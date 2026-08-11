@@ -93,7 +93,7 @@ def run_registered_sources(**ctx_kwargs) -> dict:
     from .adapters.base import AdapterContext
     from .tasks import ADAPTER_REGISTRY
 
-    totals = {'created': 0, 'updated': 0, 'skipped': 0, 'sources': {}}
+    totals = {'created': 0, 'updated': 0, 'skipped': 0, 'sources': {}, 'errors': {}}
     ctx = AdapterContext(**ctx_kwargs) if ctx_kwargs else None
     for name, adapter_cls in ADAPTER_REGISTRY.items():
         adapter = adapter_cls()
@@ -102,6 +102,8 @@ def run_registered_sources(**ctx_kwargs) -> dict:
         )
         run = run_adapter(source, adapter, ctx)
         totals['sources'][name] = run.status
+        if run.error:
+            totals['errors'][name] = run.error
         for key in ('created', 'updated', 'skipped'):
             totals[key] += (run.stats or {}).get(key, 0)
     totals['new_jobs'] = totals['created']
@@ -109,12 +111,28 @@ def run_registered_sources(**ctx_kwargs) -> dict:
 
 
 def run_adapter(source: Source, adapter, ctx=None) -> IngestionRun:
+    """Run one adapter and record the outcome as an IngestionRun.
+
+    Adapters swallow per-request failures so one bad page cannot abort a run,
+    which used to make a dead API key indistinguishable from "no new jobs" —
+    both recorded `success` with zero postings. The adapter now reports what
+    it swallowed on `request_errors`, so classify:
+
+      success  — no request failed
+      partial  — some requests failed but postings still came through
+      failed   — requests failed and nothing came through
+    """
     run = IngestionRun.objects.create(source=source)
     try:
         postings = adapter.run(ctx)
         stats = upsert_postings(source, postings)
-        run.status = 'success'
         run.stats = stats
+        errors = list(getattr(adapter, 'request_errors', []))
+        if not errors:
+            run.status = 'success'
+        else:
+            run.status = 'partial' if postings else 'failed'
+            run.error = '; '.join(errors[:5])
     except Exception as exc:  # noqa: BLE001
         run.status = 'failed'
         run.error = str(exc)

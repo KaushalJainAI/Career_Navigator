@@ -93,7 +93,7 @@ class TailorResumeView(APIView):
         out = tailor_resume(
             master.parsed_json or {},
             app.job.title,
-            app.job.description,
+            app.job.best_description,
             llm=llm,
         )
         tr, _ = TailoredResume.objects.update_or_create(
@@ -124,7 +124,7 @@ class DraftCoverLetterView(APIView):
             master.parsed_json if master else {},
             app.job.title,
             app.job.company.name,
-            app.job.description,
+            app.job.best_description,
             llm=llm,
         )
         cl, _ = CoverLetter.objects.update_or_create(
