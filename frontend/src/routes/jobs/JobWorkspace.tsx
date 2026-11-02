@@ -341,19 +341,19 @@ function FitCard({ match, noProfile }: { match: MatchData | null; noProfile: boo
             <FitRing fit={match.fit} verdict={match.verdict} size={80} />
             <VerdictBadge verdict={match.verdict} />
           </div>
-          {match.explanation.length > 0 && (
+          {(match.explanation ?? []).length > 0 && (
             <div className="mt-5">
-              <ReasonList reasons={match.explanation} />
+              <ReasonList reasons={match.explanation ?? []} />
             </div>
           )}
           <div className="mt-5 space-y-4">
             <div>
               <h3 className="mb-2 text-sm font-semibold text-slate-900">You have</h3>
-              <Chips items={match.matched_skills} tone="green" />
+              <Chips items={match.matched_skills ?? []} tone="green" />
             </div>
             <div>
               <h3 className="mb-2 text-sm font-semibold text-slate-900">Missing</h3>
-              <Chips items={match.missing_skills} tone="amber" />
+              <Chips items={match.missing_skills ?? []} tone="amber" />
               <p className="mt-2 text-xs text-slate-500">
                 If you have a missing skill, add it to your profile and it will count.
               </p>
