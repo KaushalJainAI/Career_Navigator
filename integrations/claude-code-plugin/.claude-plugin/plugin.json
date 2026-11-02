@@ -1,0 +1,8 @@
+{
+  "name": "career-navigator",
+  "version": "0.1.0",
+  "description": "Manage your job search from Claude Code: ranked jobs, truthful résumé tailoring, application tracking, deadlines, referrals and interview prep — powered by your own Claude subscription.",
+  "author": { "name": "Kaushal Jain" },
+  "homepage": "https://github.com/KaushalJainAI/Career_Navigator",
+  "keywords": ["jobs", "placements", "resume", "career"]
+}

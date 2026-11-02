@@ -15,8 +15,8 @@ from django.utils import timezone
 from .models import Application, ApplicationStatus
 
 IN_PROGRESS = (ApplicationStatus.SAVED, ApplicationStatus.TAILORED, ApplicationStatus.READY)
-INTERVIEWING = (ApplicationStatus.PHONE, ApplicationStatus.ONSITE)
-SUBMITTED = (ApplicationStatus.APPLIED, ApplicationStatus.PHONE, ApplicationStatus.ONSITE,
+INTERVIEWING = (ApplicationStatus.ASSESSMENT, ApplicationStatus.PHONE, ApplicationStatus.ONSITE)
+SUBMITTED = (ApplicationStatus.APPLIED, ApplicationStatus.ASSESSMENT, ApplicationStatus.PHONE, ApplicationStatus.ONSITE,
              ApplicationStatus.OFFER, ApplicationStatus.REJECTED)
 
 
@@ -73,12 +73,12 @@ def build_today(user, *, now=None) -> dict:
         if a.next_interview_at:
             days = (a.next_interview_at.date() - now.date()).days
             when = 'today' if days == 0 else ('tomorrow' if days == 1 else (f'in {days} days' if days > 0 else ''))
-        stage = 'phone screen' if a.status == ApplicationStatus.PHONE else 'onsite'
+        stage = {'assessment': 'online assessment', 'phone': 'interview', 'onsite': 'final round'}[a.status]
         steps.append(_step(
             'interview', f'Prepare for your {a.job.company.name} {stage}' + (f' {when}' if when else ''),
             'Run a practice round built from this job description.' if a.job_id not in prepped
             else 'You practised once — another round on your weak spots helps.',
-            'Practise now', f'/interview?application={a.id}', 3, application_id=a.id))
+            'Practise now', f'/practice?application={a.id}', 3, application_id=a.id))
 
     # Follow-ups due.
     for a in apps:
@@ -89,9 +89,21 @@ def build_today(user, *, now=None) -> dict:
                 f'You applied for {a.job.title} {days} days ago with no response yet. A short, polite note helps.',
                 'Mark followed up', f'/pipeline?focus={a.id}', 4, application_id=a.id))
 
+    # Deadlines in the next 7 days for things not yet applied to.
+    today_d = now.date()
+    for a in sorted((a for a in apps if a.status in IN_PROGRESS and a.deadline), key=lambda a: a.deadline):
+        days = (a.deadline - today_d).days
+        if days < 0 or days > 7:
+            continue
+        when = 'today' if days == 0 else ('tomorrow' if days == 1 else f'in {days} days')
+        steps.append(_step('deadline', f'{a.job.company.name} closes {when}',
+                           f'Apply for {a.job.title} before {a.deadline:%d %b}.', 'Open', f'/jobs/{a.job_id}',
+                           2.5 if days <= 2 else 4.5, application_id=a.id))
+
     # Unfinished applications.
     unfinished = [a for a in apps if a.status in IN_PROGRESS]
-    for a in sorted(unfinished, key=lambda a: a.updated_at, reverse=True)[:3]:
+    deadline_ids = {s.get('application_id') for s in steps if s['kind'] == 'deadline'}
+    for a in sorted((a for a in unfinished if a.id not in deadline_ids), key=lambda a: a.updated_at, reverse=True)[:3]:
         what = {'saved': 'Tailor your résumé and apply', 'tailored': 'Review your materials and apply',
                 'ready': 'Submit your application'}[a.status]
         steps.append(_step('apply', f'{a.job.title} at {a.job.company.name}', what + '.',
@@ -107,9 +119,9 @@ def build_today(user, *, now=None) -> dict:
     week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
     applied_this_week = sum(1 for a in apps if a.applied_at and a.applied_at >= week_start)
     submitted = [a for a in apps if a.status in SUBMITTED or a.applied_at]
-    responded = [a for a in submitted if a.status in (ApplicationStatus.PHONE, ApplicationStatus.ONSITE,
+    responded = [a for a in submitted if a.status in (ApplicationStatus.ASSESSMENT, ApplicationStatus.PHONE, ApplicationStatus.ONSITE,
                                                       ApplicationStatus.OFFER)
-                 or a.events.filter(type='status_changed', payload__status__in=['phone', 'onsite', 'offer']).exists()]
+                 or a.events.filter(type='status_changed', payload__status__in=['assessment', 'phone', 'onsite', 'offer']).exists()]
 
     return {
         'setup': {

@@ -41,3 +41,11 @@ def test_make_master_with_overwrite(auth_client, user):
     r = auth_client.post(f'/api/v1/resumes/{rid}/make-master/', {'overwrite_profile': True}, format='json')
     assert r.status_code == 200
     assert StructuredProfile.objects.get(user=user).full_name == 'Priya Sharma'
+
+
+def test_target_role_suggestions():
+    from profiles.services import suggest_target_role
+    assert suggest_target_role({'headline': 'Final-year B.Tech CSE student | Aspiring Software Engineer'}) == 'Software Engineer'
+    assert suggest_target_role({'headline': 'Student', 'experiences': [{'title': 'Software Engineering Intern'}]}) == 'Software Engineer'
+    assert suggest_target_role({'headline': 'Senior Backend Engineer'}) == 'Senior Backend Engineer'
+    assert suggest_target_role({'headline': 'B.Tech student'}) == ''

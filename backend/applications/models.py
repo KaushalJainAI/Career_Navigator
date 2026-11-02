@@ -11,6 +11,7 @@ class ApplicationStatus(models.TextChoices):
     TAILORED = 'tailored', 'Tailored'
     READY = 'ready', 'Ready to apply'
     APPLIED = 'applied', 'Applied'
+    ASSESSMENT = 'assessment', 'Online assessment'
     PHONE = 'phone', 'Phone screen'
     ONSITE = 'onsite', 'Onsite'
     OFFER = 'offer', 'Offer'
@@ -68,6 +69,8 @@ class Application(models.Model):
     applied_at = models.DateTimeField(null=True, blank=True)
     follow_up_at = models.DateTimeField(null=True, blank=True)
     next_interview_at = models.DateTimeField(null=True, blank=True)
+    # Apply-by date (campus drives, referral windows).
+    deadline = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -84,10 +87,10 @@ class Application(models.Model):
         if self.status == ApplicationStatus.APPLIED:
             self.applied_at = self.applied_at or now
             self.follow_up_at = self.follow_up_at or now + timedelta(days=self.FOLLOW_UP_DAYS)
-        elif self.status in (ApplicationStatus.PHONE, ApplicationStatus.ONSITE, ApplicationStatus.OFFER,
+        elif self.status in (ApplicationStatus.ASSESSMENT, ApplicationStatus.PHONE, ApplicationStatus.ONSITE, ApplicationStatus.OFFER,
                              ApplicationStatus.REJECTED, ApplicationStatus.WITHDRAWN):
             self.follow_up_at = None
-            if self.status in (ApplicationStatus.PHONE, ApplicationStatus.ONSITE):
+            if self.status in (ApplicationStatus.ASSESSMENT, ApplicationStatus.PHONE, ApplicationStatus.ONSITE):
                 self.applied_at = self.applied_at or now
 
     class Meta:

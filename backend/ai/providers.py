@@ -15,33 +15,119 @@ from openai import OpenAI
 _codex_lock = threading.Lock()
 
 
-def get_configured_llm() -> Callable[[str], str] | None:
+CLI_PROVIDERS = ('claude_cli', 'codex_cli', 'gemini_cli')
+
+
+def _cli_installed(provider: str) -> bool:
+    import shutil
+    cmd = {
+        'claude_cli': getattr(settings, 'CLAUDE_CLI_COMMAND', 'claude'),
+        'codex_cli': getattr(settings, 'CODEX_CLI_COMMAND', 'codex'),
+        'gemini_cli': getattr(settings, 'GEMINI_CLI_COMMAND', 'gemini'),
+    }[provider]
+    parts = shlex.split(cmd or '')
+    return bool(parts) and shutil.which(parts[0]) is not None
+
+
+def resolve_provider() -> str:
+    """The provider actually in use ('' = none → deterministic mode)."""
     provider = getattr(settings, 'AI_PROVIDER', '').strip().lower()
+    if provider == 'auto':
+        for cand in CLI_PROVIDERS:
+            if _cli_installed(cand):
+                return cand
+        return 'nvidia' if getattr(settings, 'NVIDIA_API_KEY', '').strip() else ''
+    if provider == 'nvidia' and not getattr(settings, 'NVIDIA_API_KEY', '').strip():
+        return ''
+    return provider if provider in CLI_PROVIDERS + ('nvidia',) else ''
+
+
+def _callable_for(provider: str):
+    return {
+        'claude_cli': claude_cli_complete,
+        'codex_cli': codex_cli_complete,
+        'gemini_cli': gemini_cli_complete,
+        'nvidia': nvidia_complete,
+    }.get(provider)
+
+
+def get_configured_llm() -> Callable[[str], str] | None:
+    provider = resolve_provider()
+    fn = _callable_for(provider)
+    if fn is None:
+        return None
     fallback_provider = getattr(settings, 'AI_FALLBACK_PROVIDER', '').strip().lower()
-    if provider == 'codex_cli':
-        if fallback_provider == 'nvidia':
-            return with_fallback(codex_cli_complete, nvidia_complete)
-        return codex_cli_complete
-    if provider == 'nvidia':
-        # No key means no model: callers fall back to their deterministic path
-        # instead of receiving silent empty completions.
-        if not getattr(settings, 'NVIDIA_API_KEY', '').strip():
-            return None
-        return nvidia_complete
-    return None
+    if provider in CLI_PROVIDERS and fallback_provider == 'nvidia' \
+            and getattr(settings, 'NVIDIA_API_KEY', '').strip():
+        return with_fallback(fn, nvidia_complete)
+    if provider == 'codex_cli' and fallback_provider == 'nvidia':
+        return with_fallback(fn, nvidia_complete)
+    return fn
 
 
 def configured_model_label() -> str:
-    provider = getattr(settings, 'AI_PROVIDER', '').strip().lower()
+    provider = resolve_provider()
     if provider == 'codex_cli':
         model = getattr(settings, 'CODEX_CLI_MODEL', '').strip()
         label = f'codex_cli:{model}' if model else 'codex_cli'
         if getattr(settings, 'AI_FALLBACK_PROVIDER', '').strip().lower() == 'nvidia':
             return f'{label},fallback:nvidia'
         return label
+    if provider == 'claude_cli':
+        model = getattr(settings, 'CLAUDE_CLI_MODEL', '').strip()
+        return f'claude_cli:{model}' if model else 'claude_cli'
+    if provider == 'gemini_cli':
+        model = getattr(settings, 'GEMINI_CLI_MODEL', '').strip()
+        return f'gemini_cli:{model}' if model else 'gemini_cli'
     if provider == 'nvidia':
         return f'nvidia:{getattr(settings, "NVIDIA_GUEST_MODEL", "")}'
     return ''
+
+
+def ai_status() -> dict:
+    provider = resolve_provider()
+    return {
+        'configured': getattr(settings, 'AI_PROVIDER', ''),
+        'provider': provider,
+        'label': configured_model_label(),
+        'mode': 'ai' if provider else 'deterministic',
+        'installed_clis': [p for p in CLI_PROVIDERS if _cli_installed(p)],
+    }
+
+
+def _run_cli(args: list[str], prompt: str, *, timeout: int) -> str:
+    """Run a CLI with the prompt on stdin; '' on any failure (callers fall back)."""
+    try:
+        result = subprocess.run(args, input=prompt, text=True, capture_output=True, timeout=timeout,
+                                check=False, cwd=str(settings.BASE_DIR), env=os.environ.copy())
+    except (OSError, subprocess.TimeoutExpired):
+        return ''
+    if result.returncode != 0:
+        return ''
+    return (result.stdout or '').strip()
+
+
+def claude_cli_complete(prompt: str, **_: object) -> str:
+    """Claude Code in print mode, using the operator's Claude subscription login.
+    Tools are disabled: the platform only needs text back."""
+    cmd = shlex.split(getattr(settings, 'CLAUDE_CLI_COMMAND', 'claude')) or ['claude']
+    args = [*cmd, '-p', '--output-format', 'text', '--tools', '']
+    model = getattr(settings, 'CLAUDE_CLI_MODEL', '').strip()
+    if model:
+        args += ['--model', model]
+    with _codex_lock:
+        return _run_cli(args, prompt, timeout=int(getattr(settings, 'CLI_TIMEOUT_SECONDS', 120)))
+
+
+def gemini_cli_complete(prompt: str, **_: object) -> str:
+    """Gemini CLI in non-interactive mode (prompt on stdin), using the operator's Google login."""
+    cmd = shlex.split(getattr(settings, 'GEMINI_CLI_COMMAND', 'gemini')) or ['gemini']
+    args = [*cmd]
+    model = getattr(settings, 'GEMINI_CLI_MODEL', '').strip()
+    if model:
+        args += ['-m', model]
+    with _codex_lock:
+        return _run_cli(args, prompt, timeout=int(getattr(settings, 'CLI_TIMEOUT_SECONDS', 120)))
 
 
 def with_fallback(primary: Callable[[str], str], fallback: Callable[[str], str]) -> Callable[[str], str]:

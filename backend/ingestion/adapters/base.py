@@ -64,6 +64,10 @@ class BaseAdapter:
 
     def __init__(self, transport: httpx.BaseTransport | None = None):
         self.transport = transport
+        # Requests that failed (network/HTTP/JSON). Lets callers tell
+        # "source had nothing new" apart from "source was unreachable".
+        self.failures = 0
+        self.requests = 0
 
     def fetch(self, ctx: AdapterContext) -> Iterable[dict]:  # pragma: no cover - abstract
         raise NotImplementedError
@@ -83,14 +87,17 @@ class BaseAdapter:
 
     def _request_json(self, client: httpx.Client, method: str, url: str, **kwargs) -> Any:
         """Issue a request and parse JSON; on any failure log and return None."""
+        self.requests = getattr(self, 'requests', 0) + 1
         try:
             response = client.request(method, url, **kwargs)
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as exc:
+            self.failures = getattr(self, 'failures', 0) + 1
             logger.warning('%s: source API returned HTTP %s',
                            self.source_name, exc.response.status_code)
         except (httpx.HTTPError, ValueError) as exc:
+            self.failures = getattr(self, 'failures', 0) + 1
             logger.warning('%s: request failed: %s', self.source_name, type(exc).__name__)
         return None
 

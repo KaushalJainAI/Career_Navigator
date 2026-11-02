@@ -91,6 +91,24 @@ def _seed_bank(role: str, stage: str, difficulty: str, count: int) -> list[dict]
             'How do you handle ambiguous requirements?',
             'Give an example of cross-team collaboration.',
         ],
+        'hr': [
+            'Tell me about yourself.',
+            'Why should we hire you over other candidates?',
+            'What are your strengths and one real weakness?',
+            'Where do you see yourself in three years?',
+            'Are you open to relocation and to working in shifts if needed?',
+            'Do you have any questions for us?',
+        ],
+        'cs_fundamentals': [
+            'Explain the difference between a process and a thread. When would you use each?',
+            'What is database normalization? Walk through 1NF, 2NF and 3NF with an example.',
+            'Explain the four pillars of OOP with a short example of each.',
+            'What happens when you type a URL into the browser and press Enter?',
+            'What is a deadlock? What conditions cause it and how can it be prevented?',
+            'Explain the difference between TCP and UDP and give a use case for each.',
+            'What is the difference between an INNER JOIN and a LEFT JOIN? Write a query using one.',
+            'How does a hash map work internally, and what is the time complexity of lookups?',
+        ],
         'role_specific': [
             f'What is the hardest thing about being a {role}?',
             f'How do you measure success as a {role}?',
@@ -267,7 +285,20 @@ def job_question_bank(*, role: str, company: str, stage: str, description: str =
                 break
     resp = _jd_responsibility(jd_text, set()) if jd_text else ''
 
-    if stage == 'recruiter':
+    projects = [p for p in (snapshot.get('projects') or []) if p.get('name')]
+    if stage == 'hr':
+        bank += [
+            q(f'Tell me about yourself — in the context of this {role} role.', 'hr', ['concise arc', 'relevance']),
+            q(f'Why do you want to join {company_label}?', 'hr', ['company specifics', 'motivation']),
+        ]
+        if projects:
+            bank.append(q(f'Which project are you proudest of — {projects[0]["name"]} or another — and why?', 'hr',
+                          ['ownership', 'impact']))
+    elif stage == 'cs_fundamentals':
+        for s in matched[:2]:
+            bank.append(q(f'You list {s}. Explain how it works under the hood, as you would to a junior.', 'cs',
+                          ['correct concepts', 'clarity', 'example']))
+    elif stage == 'recruiter':
         bank += [
             q(f'Walk me through your background and why it fits a {role} role.', 'recruiter', ['concise arc', 'relevance']),
             q(f'Why {company_label}, and why now?', 'recruiter', ['company specifics', 'motivation']),
@@ -283,6 +314,10 @@ def job_question_bank(*, role: str, company: str, stage: str, description: str =
         if best_bullet:
             bank.append(q(f'On your résumé: “{best_bullet.rstrip(".")}.” Walk me through it — what was your '
                           'specific contribution and how did you measure success?', 'resume', star))
+        for p in projects[:2 if not best_bullet else 1]:
+            bank.append(q(f'Walk me through your project {p["name"]}: the problem, your design choices, '
+                          'what broke and what you would do differently.', 'project',
+                          ['problem', 'design choices', 'trade-offs', 'learning']))
         if resp:
             bank.append(q(f'This role involves “{resp}”. Tell me about a time you did something similar.',
                           'role', star))
@@ -294,7 +329,7 @@ def job_question_bank(*, role: str, company: str, stage: str, description: str =
                              'Start with requirements, then scale it.', 'system_design',
                              ['requirements', 'data model', 'scaling', 'trade-offs']))
         bank.append(q(f'Why do you want to work at {company_label}?', 'motivation', ['company specifics', 'fit']))
-    seed = _seed_bank(role, 'behavioral' if stage in ('role_specific', 'tech_phone') else stage, difficulty, count)
+    seed = _seed_bank(role, 'behavioral' if stage in ('role_specific', 'tech_phone') else stage, difficulty, 12)
     seen = {b['prompt'] for b in bank}
     for item in seed:
         if len(bank) >= count:

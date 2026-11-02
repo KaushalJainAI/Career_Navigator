@@ -111,6 +111,19 @@ class Candidate:
     remote_ok: bool = True
     exclude_companies: list[str] = field(default_factory=list)
     has_data: bool = False
+    gpa: float | None = None        # on its own scale (see gpa_scale)
+    gpa_scale: float | None = None  # 10 or 4
+    grad_year: int | None = None
+    is_fresher: bool = False
+
+
+def parse_gpa(raw: str) -> tuple[float | None, float | None]:
+    m = re.search(r'(\d+(?:\.\d+)?)\s*(?:/\s*(\d+(?:\.\d+)?))?', raw or '')
+    if not m:
+        return None, None
+    value = float(m.group(1))
+    scale = float(m.group(2)) if m.group(2) else (4.0 if value <= 4.0 else (10.0 if value <= 10 else 100.0))
+    return value, scale
 
 
 def _years_from_ranges(ranges: list[tuple[date | None, date | None, bool]]) -> float:
@@ -167,6 +180,12 @@ def candidate_from_profile(profile) -> Candidate:
         c.skills.setdefault(s.lower(), s)
     parts.extend(c.skills.values())
     c.years = _years_from_ranges(ranges)
+    for ed in profile.educations.all():
+        if ed.end_date and (c.grad_year is None or ed.end_date.year > c.grad_year):
+            c.grad_year = ed.end_date.year
+        if ed.gpa and c.gpa is None:
+            c.gpa, c.gpa_scale = parse_gpa(ed.gpa)
+    c.is_fresher = c.years < 1 or (c.grad_year is not None and c.grad_year >= date.today().year - 1 and c.years < 2)
     targets = list(pref.target_titles or []) if pref else []
     c.titles = [t for t in targets + [profile.headline] + c.titles if t]
     c.text = ' '.join(p for p in parts if p)
@@ -238,6 +257,55 @@ def required_years(text: str) -> int | None:
             if 0 < n <= 20:
                 best = n if best is None else min(best, n)
     return best
+
+
+# ---------------------------------------------------------------- eligibility (freshers)
+
+FRESHER_RE = re.compile(r'\b(new[ -]?grads?|graduates?|entry[ -]level|freshers?|campus|university hire|'
+                        r'early[ -]career|0\s*[-–to]+\s*[12]\s*years?|intern(?:ship)?s?|trainee|batch)\b', re.IGNORECASE)
+CGPA_RE = re.compile(
+    r'(?:(?:cgpa|gpa|cpi)[^.\n\d]{0,25}(\d{1,2}(?:\.\d{1,2})?)(?:\s*/\s*(\d{1,2}))?)'
+    r'|(?:(\d{1,2}(?:\.\d{1,2})?)\s*(?:/\s*(\d{1,2}))?\s*(?:cgpa|gpa|cpi))', re.IGNORECASE)
+BATCH_RE = re.compile(r'(?:(?:batch|class|graduating|graduates?|passouts?|pass-outs?)\s*(?:of|in|year)?\s*[:\-]?\s*'
+                      r'((?:20\d\d)(?:\s*(?:,|/|&|and|or)\s*20\d\d)*))'
+                      r'|((?:20\d\d)(?:\s*(?:,|/|&|and|or)\s*20\d\d)*)\s*(?:batch|graduates|passouts?|pass-outs?)',
+                      re.IGNORECASE)
+
+
+def eligibility(c: Candidate, text: str) -> tuple[float, list[dict]]:
+    """(penalty, reasons) for CGPA cutoffs and batch years stated in the JD."""
+    reasons: list[dict] = []
+    penalty = 0.0
+    m = CGPA_RE.search(text or '')
+    if m:
+        cutoff = float(m.group(1) or m.group(3))
+        scale = float(m.group(2) or m.group(4) or (4 if cutoff <= 4 else 10))
+        if cutoff <= scale and c.gpa is not None and c.gpa_scale:
+            mine = c.gpa / c.gpa_scale * scale
+            if mine + 1e-9 < cutoff:
+                penalty += 0.3
+                reasons.append({'kind': 'negative', 'title': f'CGPA cutoff {cutoff:g}',
+                                'detail': f'Your CGPA ({c.gpa:g}/{c.gpa_scale:g}) is below the stated cutoff.'})
+            else:
+                reasons.append({'kind': 'positive', 'title': f'Meets CGPA cutoff {cutoff:g}',
+                                'detail': f'Your CGPA is {c.gpa:g}/{c.gpa_scale:g}.'})
+        elif cutoff <= scale:
+            reasons.append({'kind': 'neutral', 'title': f'CGPA cutoff {cutoff:g}',
+                            'detail': 'Add your CGPA to your education to check eligibility.'})
+    b = BATCH_RE.search(text or '')
+    if b:
+        years = sorted({int(y) for y in re.findall(r'20\d\d', b.group(1) or b.group(2) or '')})
+        if years and c.grad_year:
+            if c.grad_year in years:
+                reasons.append({'kind': 'positive', 'title': f'Open to your batch ({c.grad_year})', 'detail': ''})
+            else:
+                penalty += 0.3
+                reasons.append({'kind': 'negative', 'title': f'For {"/".join(map(str, years))} batch',
+                                'detail': f'You graduate in {c.grad_year}.'})
+        elif years:
+            reasons.append({'kind': 'neutral', 'title': f'For {"/".join(map(str, years))} batch',
+                            'detail': 'Add your graduation year to check eligibility.'})
+    return penalty, reasons
 
 
 # ---------------------------------------------------------------- scoring
@@ -323,26 +391,38 @@ def score_fit(c: Candidate, *, title: str, description: str, location: str = '',
                             'detail': 'The title is far from the roles you target or have held.'})
     job_level = seniority_level(title)
     seniority_penalty = 0.0
-    if job_level is not None and c.years:
+    knows_years = bool(c.years) or c.is_fresher
+    if job_level is not None and knows_years:
         cand_level = level_for_years(c.years)
         diff = job_level - cand_level
         if diff >= 2:
             seniority_penalty = 0.12
             reasons.append({'kind': 'negative', 'title': 'Likely above your level',
-                            'detail': f'Title suggests more seniority than your ~{c.years:g} years.'})
+                            'detail': ('Title suggests an experienced hire; you are early in your career.'
+                                       if c.is_fresher else f'Title suggests more seniority than your ~{c.years:g} years.')})
         elif diff <= -2 and job_level <= 1:
             seniority_penalty = 0.08
             reasons.append({'kind': 'neutral', 'title': 'Likely below your level',
                             'detail': f'Looks junior for ~{c.years:g} years of experience.'})
     req = required_years(text)
-    if req is not None and c.years:
+    if req is not None and knows_years:
         if c.years + 1 < req:
-            seniority_penalty += 0.08
+            seniority_penalty += 0.08 if req <= 3 else 0.15
             reasons.append({'kind': 'negative', 'title': f'Asks for {req}+ years',
                             'detail': f'Your profile shows ~{c.years:g} years.'})
         else:
             reasons.append({'kind': 'positive', 'title': f'Asks for {req}+ years',
                             'detail': f'You have ~{c.years:g} years.'})
+
+    # --- freshers: entry-level signals + eligibility rules
+    fresher_bonus = 0.0
+    if c.is_fresher and (FRESHER_RE.search(title) or FRESHER_RE.search(text[:3000])) and (job_level is None or job_level <= 1):
+        fresher_bonus = 0.06
+        reasons.append({'kind': 'positive', 'title': 'Open to freshers',
+                        'detail': 'The posting mentions graduates / entry level / internships.'})
+    elig_penalty, elig_reasons = eligibility(c, text)
+    reasons.extend(elig_reasons)
+    seniority_penalty += elig_penalty
 
     # --- text similarity
     jt = job_tokens if job_tokens is not None else tokenize(f'{title} {text}')
@@ -364,7 +444,7 @@ def score_fit(c: Candidate, *, title: str, description: str, location: str = '',
         w = {'skills': 0.45, 'title': 0.25, 'text': 0.15, 'location': 0.15}
         raw = (w['skills'] * skill_score + w['title'] * title_score
                + w['text'] * text_score + w['location'] * loc_score)
-    fit = max(0, min(100, round((raw - seniority_penalty) * 100)))
+    fit = max(0, min(100, round((raw + fresher_bonus - seniority_penalty) * 100)))
     return {
         'fit': fit,
         'score': round(fit / 100, 4),

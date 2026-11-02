@@ -11,6 +11,7 @@ class AgentSession(models.Model):
         ('general', 'General'),
         ('tailoring', 'Tailoring'),
         ('autonomous_apply', 'Autonomous Apply'),
+        ('copilot', 'Copilot chat'),
     ]
     STATUS_CHOICES = [
         ('active', 'active'),

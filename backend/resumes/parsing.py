@@ -33,16 +33,23 @@ def extract_text(file: IO[bytes], filename: str) -> str:
         if docx is None:
             raise RuntimeError('python-docx is not installed')
         document = docx.Document(io.BytesIO(data))
-        lines = [p.text for p in document.paragraphs]
-        # Many résumé templates lay sections out in tables; keep that text too.
-        for table in document.tables:
-            for row in table.rows:
-                seen_cells = set()
-                for cell in row.cells:
-                    if id(cell._tc) in seen_cells:
-                        continue
-                    seen_cells.add(id(cell._tc))
-                    lines.extend(p.text for p in cell.paragraphs)
+        # Walk the body in document order so text inside layout tables (common
+        # in résumé templates) stays inside its section.
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
+        lines = []
+        for child in document.element.body.iterchildren():
+            tag = child.tag.rsplit('}', 1)[-1]
+            if tag == 'p':
+                lines.append(Paragraph(child, document).text)
+            elif tag == 'tbl':
+                for row in Table(child, document).rows:
+                    seen_cells = set()
+                    for cell in row.cells:
+                        if id(cell._tc) in seen_cells:
+                            continue
+                        seen_cells.add(id(cell._tc))
+                        lines.extend(p.text for p in cell.paragraphs)
         return '\n'.join(lines)
     # Fallback: treat as plain text
     return data.decode('utf-8', errors='ignore')

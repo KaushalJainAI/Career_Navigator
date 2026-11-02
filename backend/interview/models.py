@@ -10,6 +10,8 @@ class InterviewStage(models.TextChoices):
     SYSTEM_DESIGN = 'system_design', 'System design'
     BEHAVIORAL = 'behavioral', 'Behavioral / onsite'
     ROLE_SPECIFIC = 'role_specific', 'Role-specific deep dive'
+    HR = 'hr', 'HR round'
+    CS_FUNDAMENTALS = 'cs_fundamentals', 'CS fundamentals'
 
 
 class InterviewSession(models.Model):

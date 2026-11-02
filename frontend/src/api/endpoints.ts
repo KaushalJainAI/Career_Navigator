@@ -55,6 +55,11 @@ export const Resumes = {
     return api.post('/resumes/', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       .then((r) => r.data);
   },
+  importText: (text: string, label = 'Pasted resume') =>
+    api.post('/resumes/import-text/', { text, label }).then((r) => r.data),
+  makeMaster: (id: number, overwrite_profile = false) =>
+    api.post(`/resumes/${id}/make-master/`, { overwrite_profile }).then((r) => r.data),
+  remove: (id: number) => api.delete(`/resumes/${id}/`).then((r) => r.data),
 };
 
 export const Jobs = {
@@ -62,6 +67,10 @@ export const Jobs = {
     api.get('/jobs/', { params }).then((r) => r.data),
   detail: (id: number) => api.get(`/jobs/${id}/`).then((r) => r.data),
   match: (id: number) => api.get(`/matching/jobs/${id}/`).then((r) => r.data),
+  feed: (params: Record<string, string | number | boolean> = {}) =>
+    api.get('/matching/feed/', { params }).then((r) => r.data),
+  refresh: () => api.post('/jobs/refresh/', {}, { timeout: 180000 }).then((r) => r.data),
+  add: (payload: Record<string, unknown>) => api.post('/jobs/add/', payload).then((r) => r.data),
 };
 
 export const Applications = {
@@ -76,13 +85,23 @@ export const Applications = {
     api.patch(`/applications/${id}/`, payload).then((r) => r.data),
   approve: (id: number) =>
     api.post(`/applications/${id}/approve/`).then((r) => r.data as { approval_token: string }),
+  today: () => api.get('/applications/today/').then((r) => r.data),
+  followedUp: (id: number) => api.post(`/applications/${id}/followed-up/`).then((r) => r.data),
 };
 
 export const Tailoring = {
   resume: (applicationId: number) =>
     api.post('/tailoring/resume/', { application_id: applicationId }).then((r) => r.data),
+  getResume: (applicationId: number) =>
+    api.get('/tailoring/resume/', { params: { application_id: applicationId } }).then((r) => r.data),
+  editResume: (id: number, content: Record<string, unknown>) =>
+    api.patch(`/tailoring/resume/${id}/`, { content }).then((r) => r.data),
   coverLetter: (applicationId: number) =>
     api.post('/tailoring/cover-letter/', { application_id: applicationId }).then((r) => r.data),
+  getCoverLetter: (applicationId: number) =>
+    api.get('/tailoring/cover-letter/', { params: { application_id: applicationId } }).then((r) => r.data),
+  editCoverLetter: (id: number, content: string) =>
+    api.patch(`/tailoring/cover-letter/${id}/`, { content }).then((r) => r.data),
   exportResume: (applicationId: number, fmt: 'txt' | 'docx' = 'txt') =>
     api.get('/tailoring/resume/export/', {
       params: { application_id: applicationId, fmt },
@@ -91,12 +110,13 @@ export const Tailoring = {
 };
 
 export const Interview = {
-  start: (payload: { role: string; stage: string; difficulty?: string; company?: number }) =>
+  start: (payload: { role?: string; stage: string; difficulty?: string; company?: number; application?: number }) =>
     api.post('/interview/sessions/', payload).then((r) => r.data),
   detail: (id: number) => api.get(`/interview/sessions/${id}/`).then((r) => r.data),
   answer: (id: number, answer: string) =>
     api.post(`/interview/sessions/${id}/answer/`, { answer }).then((r) => r.data),
   report: (id: number) => api.post(`/interview/sessions/${id}/report/`).then((r) => r.data),
+  list: () => api.get('/interview/sessions/').then((r) => r.data),
 };
 
 export const Agent = {
@@ -169,4 +189,17 @@ export const Billing = {
   summary: () => api.get('/billing/summary/').then((r) => r.data),
   ledger: () => api.get('/billing/ledger/').then((r) => r.data),
   topUp: (amount: number) => api.post('/billing/top-up/', { amount }).then((r) => r.data),
+};
+
+export const Copilot = {
+  latest: () => api.get('/agent/copilot/latest/').then((r) => r.data),
+  session: (id: number) => api.get(`/agent/copilot/${id}/`).then((r) => r.data),
+  send: (message: string, session_id?: number | null) =>
+    api.post('/agent/copilot/', { message, session_id }, { timeout: 180000 }).then((r) => r.data),
+  approve: (session_id: number, action_id: string, approve: boolean) =>
+    api.post(`/agent/copilot/${session_id}/approve/`, { action_id, approve }, { timeout: 180000 }).then((r) => r.data),
+};
+
+export const AI = {
+  status: () => api.get('/ai/status/').then((r) => r.data),
 };

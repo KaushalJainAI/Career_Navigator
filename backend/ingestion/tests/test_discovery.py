@@ -104,3 +104,12 @@ def test_manual_jobs_are_private(auth_client, user, api_client):
 
 def test_refresh_requires_target_role(auth_client):
     assert auth_client.post('/api/v1/jobs/refresh/').status_code == 400
+
+
+def test_unreachable_source_is_reported_not_ok():
+    def handler(request):
+        raise httpx.ConnectError('blocked')
+    cand = Candidate(titles=['Backend Engineer'])
+    plans = [Plan('remotive', 'aggregator', RemotiveAdapter(transport=httpx.MockTransport(handler)), AdapterContext())]
+    out = discover_for_candidate(cand, plans=plans)
+    assert out['sources'][0]['ok'] is False and out['sources'][0]['error'] == 'unreachable'

@@ -136,3 +136,36 @@ def test_codex_cli_complete_returns_empty_string_on_missing_command(settings, mo
 def test_nvidia_complete_returns_empty_without_key(settings):
     settings.NVIDIA_API_KEY = ''
     assert nvidia_complete('Prompt text') == ''
+
+
+def test_auto_picks_installed_cli(settings, monkeypatch):
+    from ai import providers
+    settings.AI_PROVIDER = 'auto'
+    settings.NVIDIA_API_KEY = ''
+    monkeypatch.setattr(providers, '_cli_installed', lambda p: p == 'gemini_cli')
+    assert providers.resolve_provider() == 'gemini_cli'
+    assert providers.get_configured_llm() is providers.gemini_cli_complete
+    monkeypatch.setattr(providers, '_cli_installed', lambda p: False)
+    assert providers.get_configured_llm() is None
+    assert providers.ai_status()['mode'] == 'deterministic'
+
+
+def test_claude_cli_passes_print_mode_and_disables_tools(settings, monkeypatch):
+    from ai import providers
+    seen = {}
+
+    def fake_run(args, prompt, *, timeout):
+        seen['args'], seen['prompt'] = args, prompt
+        return 'hi'
+    monkeypatch.setattr(providers, '_run_cli', fake_run)
+    settings.CLAUDE_CLI_COMMAND = 'claude'
+    settings.CLAUDE_CLI_MODEL = 'sonnet'
+    assert providers.claude_cli_complete('hello') == 'hi'
+    assert seen['args'][:6] == ['claude', '-p', '--output-format', 'text', '--tools', '']
+    assert seen['args'][-2:] == ['--model', 'sonnet'] and seen['prompt'] == 'hello'
+
+
+def test_status_endpoint(auth_client, settings):
+    settings.AI_PROVIDER = ''
+    r = auth_client.get('/api/v1/ai/status/')
+    assert r.status_code == 200 and r.data['mode'] == 'deterministic'

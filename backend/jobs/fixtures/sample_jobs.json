@@ -1,0 +1,146 @@
+[
+ {
+  "external_id": "sample-1",
+  "title": "Software Developer - Freshers (2026 Batch)",
+  "company": "Zoho",
+  "location": "Chennai, India",
+  "remote": false,
+  "description": "<p>Zoho is hiring freshers from the 2026 batch for Software Developer roles.</p><ul><li>Design and build features for Zoho's SaaS products used by millions</li><li>Write clean code in Java or Python with strong data structures and algorithms</li><li>Work with SQL databases and REST APIs</li></ul><p>Eligibility: B.E./B.Tech (CSE/IT/ECE), CGPA 7.0 and above, no active backlogs. Selection: online assessment, two technical rounds, HR round.</p>",
+  "apply_url": "https://example.com/careers/zoho/1"
+ },
+ {
+  "external_id": "sample-2",
+  "title": "Systems Engineer - Graduate Trainee",
+  "company": "Infosys",
+  "location": "Bengaluru, India",
+  "remote": false,
+  "description": "<p>Infosys Graduate Trainee program for 2025/2026 graduates.</p><ul><li>Build and support enterprise applications in Java, SQL and JavaScript</li><li>Learn Agile delivery and work with global clients</li></ul><p>Eligibility: 60% throughout, CGPA 6.0 and above. Selection: online test (aptitude + coding), interview.</p>",
+  "apply_url": "https://example.com/careers/infosys/2"
+ },
+ {
+  "external_id": "sample-3",
+  "title": "SDE Intern (6 months)",
+  "company": "Razorpay",
+  "location": "Bengaluru, India",
+  "remote": false,
+  "description": "<p>Join Razorpay's payments platform team as an intern.</p><ul><li>Build backend services in Go or Python with PostgreSQL and Redis</li><li>Write unit tests and take part in code reviews</li><li>Ship a production feature with your mentor</li></ul><p>Open to final-year students graduating in 2026. Strong DSA, Git and Linux basics.</p>",
+  "apply_url": "https://example.com/careers/razorpay/3"
+ },
+ {
+  "external_id": "sample-4",
+  "title": "Associate Software Engineer - New Grad",
+  "company": "Swiggy",
+  "location": "Bengaluru, India",
+  "remote": false,
+  "description": "<ul><li>Develop Android and backend features in Kotlin, Java and Node.js</li><li>Work with microservices, Kafka and MySQL</li><li>Collaborate with product managers and designers</li></ul><p>New grads (0-1 years). B.Tech CSE preferred. CGPA 7.5 and above.</p>",
+  "apply_url": "https://example.com/careers/swiggy/4"
+ },
+ {
+  "external_id": "sample-5",
+  "title": "Frontend Developer - Entry Level",
+  "company": "Freshworks",
+  "location": "Chennai, India",
+  "remote": false,
+  "description": "<ul><li>Build responsive UIs in React and TypeScript</li><li>Write HTML, CSS and accessible components for our design system</li><li>Use Jest and Cypress for testing</li></ul><p>Entry level, 0-2 years of experience. Portfolio of projects is a plus.</p>",
+  "apply_url": "https://example.com/careers/freshworks/5"
+ },
+ {
+  "external_id": "sample-6",
+  "title": "Software Engineer, University Graduate 2026",
+  "company": "Google",
+  "location": "Hyderabad, India",
+  "remote": false,
+  "description": "<p>Minimum qualifications: Bachelor's degree in Computer Science, graduating in 2026. Experience with data structures and algorithms. Experience in one of C++, Java, Python or Go.</p><ul><li>Design, develop, test and deploy software for large-scale systems</li><li>Participate in code reviews and design discussions</li></ul>",
+  "apply_url": "https://example.com/careers/google/6"
+ },
+ {
+  "external_id": "sample-7",
+  "title": "Software Engineer - New Grad",
+  "company": "Microsoft",
+  "location": "Hyderabad, India",
+  "remote": false,
+  "description": "<ul><li>Build cloud services on Azure in C#, Java or Python</li><li>Work on distributed systems and REST APIs</li><li>Write unit tests and debug production issues</li></ul><p>Graduating 2026 with a B.Tech/M.Tech in CS. Strong problem solving and CS fundamentals (OS, DBMS, networks).</p>",
+  "apply_url": "https://example.com/careers/microsoft/7"
+ },
+ {
+  "external_id": "sample-8",
+  "title": "Ninja - Assistant System Engineer Trainee",
+  "company": "TCS",
+  "location": "Pune, India",
+  "remote": false,
+  "description": "<p>TCS National Qualifier Test hiring for 2026 batch.</p><ul><li>Develop and maintain applications in Java, Python or .NET</li><li>Support databases using SQL</li></ul><p>Eligibility: 60% or 6 CGPA in all semesters. Selection: TCS NQT, technical interview, managerial and HR round.</p>",
+  "apply_url": "https://example.com/careers/tcs/8"
+ },
+ {
+  "external_id": "sample-9",
+  "title": "Data Analyst - Graduate",
+  "company": "Flipkart",
+  "location": "Bengaluru, India",
+  "remote": false,
+  "description": "<ul><li>Analyse business data using SQL, Python and Excel</li><li>Build dashboards in Tableau or Power BI</li><li>Run A/B testing analysis and present insights to stakeholders</li></ul><p>Freshers and graduates with strong statistics fundamentals. CGPA 7.0 and above.</p>",
+  "apply_url": "https://example.com/careers/flipkart/9"
+ },
+ {
+  "external_id": "sample-10",
+  "title": "Software Engineer I - Backend",
+  "company": "Postman",
+  "location": "Bengaluru, India",
+  "remote": true,
+  "description": "<ul><li>Build APIs and services in Node.js and TypeScript</li><li>Work with MongoDB, Redis and Docker on AWS</li><li>Own features end to end with a small team</li></ul><p>0-2 years of experience. Remote friendly.</p>",
+  "apply_url": "https://example.com/careers/postman/10"
+ },
+ {
+  "external_id": "sample-11",
+  "title": "Graduate Software Engineer",
+  "company": "Atlassian",
+  "location": "Bengaluru, India",
+  "remote": true,
+  "description": "<ul><li>Build features for Jira and Confluence in Java and React</li><li>Use Git, CI/CD and AWS</li><li>Write tests and contribute to design discussions</li></ul><p>For 2025 graduates only. Remote within India.</p>",
+  "apply_url": "https://example.com/careers/atlassian/11"
+ },
+ {
+  "external_id": "sample-12",
+  "title": "Senior Backend Engineer, Payments",
+  "company": "Stripe",
+  "location": "Remote",
+  "remote": true,
+  "description": "<ul><li>Lead the design of payment systems in Ruby and Go</li><li>Mentor engineers and drive technical strategy</li></ul><p>8+ years of experience building distributed systems, Kubernetes and Kafka.</p>",
+  "apply_url": "https://example.com/careers/stripe/12"
+ },
+ {
+  "external_id": "sample-13",
+  "title": "Staff Software Engineer - Spark",
+  "company": "Databricks",
+  "location": "San Francisco, CA",
+  "remote": false,
+  "description": "<ul><li>Own the Spark runtime and query optimizer in Scala</li></ul><p>10+ years of experience with distributed systems.</p>",
+  "apply_url": "https://example.com/careers/databricks/13"
+ },
+ {
+  "external_id": "sample-14",
+  "title": "Sales Development Representative",
+  "company": "Acme Corp",
+  "location": "Mumbai, India",
+  "remote": false,
+  "description": "<ul><li>Prospect new accounts via Salesforce and HubSpot</li><li>Own a monthly pipeline quota</li></ul>",
+  "apply_url": "https://example.com/careers/acme-corp/14"
+ },
+ {
+  "external_id": "sample-15",
+  "title": "Machine Learning Intern",
+  "company": "Paytm",
+  "location": "Noida, India",
+  "remote": false,
+  "description": "<ul><li>Train and evaluate models with Python, Pandas, scikit-learn and PyTorch</li><li>Work on NLP for customer support</li></ul><p>Final-year students (2026 batch). Projects in machine learning preferred.</p>",
+  "apply_url": "https://example.com/careers/paytm/15"
+ },
+ {
+  "external_id": "sample-16",
+  "title": "Full Stack Developer - Fresher",
+  "company": "CRED",
+  "location": "Bengaluru, India",
+  "remote": false,
+  "description": "<ul><li>Build product features with React, Node.js and PostgreSQL</li><li>Ship quickly with Docker and CI/CD</li></ul><p>Freshers welcome. Show us what you've built.</p>",
+  "apply_url": "https://example.com/careers/cred/16"
+ }
+]

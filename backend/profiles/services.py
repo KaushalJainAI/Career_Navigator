@@ -9,6 +9,7 @@ Rules (the candidate stays in control):
 
 from __future__ import annotations
 
+import re
 from datetime import date
 
 from django.db import transaction
@@ -16,6 +17,43 @@ from django.db import transaction
 from .models import Education, Experience, Preference, Project, Skill, StructuredProfile
 
 SCALARS = ['full_name', 'headline', 'summary', 'location', 'phone', 'website', 'linkedin', 'github']
+
+
+ROLE_RE = re.compile(r'\b(engineer|developer|analyst|designer|scientist|manager|consultant|architect|programmer|'
+                     r'administrator|specialist|marketer|writer|researcher|sde|swe|intern)\b', re.IGNORECASE)
+STUDENT_RE = re.compile(r'\b(student|undergrad|graduate|final[- ]year|pursuing|b\.?tech|m\.?tech|bachelor|master)\b',
+                        re.IGNORECASE)
+FILLER_RE = re.compile(r'^(aspiring|budding|passionate|enthusiastic|motivated|future|ambitious|self-taught|an?|the)\s+',
+                       re.IGNORECASE)
+
+
+def suggest_target_role(parsed: dict) -> str:
+    """A job title to search for: the role in the headline ("Aspiring Software
+    Engineer" -> "Software Engineer"), else the latest job title without "Intern"."""
+    candidates = re.split(r'\s*[|•·/,]\s*|\s+-\s+', parsed.get('headline') or '')
+    candidates += [e.get('title', '') for e in parsed.get('experiences') or [] if isinstance(e, dict)]
+    for c in candidates:
+        c = c.strip()
+        if not c or STUDENT_RE.search(c) or not ROLE_RE.search(c):
+            continue
+        while FILLER_RE.match(c):
+            c = FILLER_RE.sub('', c, count=1)
+        c = re.sub(r'\s*\b(intern(ship)?|trainee)\b\s*', ' ', c, flags=re.IGNORECASE).strip()
+        c = re.sub(r'\bEngineering$', 'Engineer', c)
+        if c:
+            return c[:1].upper() + c[1:]
+    return ''
+
+
+def is_early_career(parsed: dict) -> bool:
+    exps = [e for e in parsed.get('experiences') or [] if isinstance(e, dict)]
+    if not exps:
+        return True
+    if all(re.search(r'\bintern', e.get('title', ''), re.IGNORECASE) for e in exps):
+        return True
+    starts = [_d(e.get('start_date')) for e in exps]
+    starts = [x for x in starts if x]
+    return bool(starts) and (date.today() - min(starts)).days < 365
 
 
 def _d(value):
@@ -92,10 +130,12 @@ def apply_parsed_resume(profile: StructuredProfile, parsed: dict, *, overwrite: 
     # Seed search preferences from the résumé so the job feed works immediately.
     pref, created = Preference.objects.get_or_create(profile=profile)
     if not pref.target_titles:
-        title = parsed.get('headline') or (parsed.get('experiences') or [{}])[0].get('title', '')
-        if title:
-            pref.target_titles = [title[:120]]
+        role = suggest_target_role(parsed)
+        if role:
+            pref.target_titles = [role[:120]]
             changed.append('preference.target_titles')
+    if not pref.seniority and is_early_career(parsed):
+        pref.seniority = 'entry'
     if not pref.locations and parsed.get('location') and parsed['location'] != 'Remote':
         pref.locations = [parsed['location']]
         changed.append('preference.locations')

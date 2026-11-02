@@ -113,6 +113,20 @@ class AddJobView(APIView):
         upsert_postings(source, [posting])
         job = JobPosting.objects.get(source=source, external_id=posting['external_id'])
         app, _ = Application.objects.get_or_create(user=request.user, job=job)
+        changed = []
+        deadline = (data.get('deadline') or '').strip() if isinstance(data.get('deadline'), str) else ''
+        if deadline:
+            from datetime import date
+            try:
+                app.deadline = date.fromisoformat(deadline[:10])
+                changed.append('deadline')
+            except ValueError:
+                pass
+        if (data.get('notes') or '').strip():
+            app.notes = data['notes'].strip()
+            changed.append('notes')
+        if changed:
+            app.save(update_fields=changed + ['updated_at'])
         out = JobPostingSerializer(job).data
         out['application_id'] = app.id
         return Response(out, status=status.HTTP_201_CREATED)

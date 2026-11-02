@@ -110,7 +110,11 @@ def relevance_filter(candidate: Candidate) -> Callable[[dict], bool]:
 
 def _fetch(plan: Plan) -> tuple[Plan, list[dict], str]:
     try:
-        return plan, plan.adapter.run(plan.ctx), ''
+        rows = plan.adapter.run(plan.ctx)
+        fails, reqs = getattr(plan.adapter, 'failures', 0), getattr(plan.adapter, 'requests', 0)
+        if not rows and fails and fails >= reqs:
+            return plan, rows, 'unreachable'
+        return plan, rows, ''
     except Exception as exc:  # noqa: BLE001 - one bad source must not kill the refresh
         logger.warning('discovery: %s failed: %s', plan.name, type(exc).__name__)
         return plan, [], type(exc).__name__
@@ -138,5 +142,5 @@ def discover_for_candidate(candidate: Candidate, *, watch: list[str] | None = No
         total_created += stats['created']
         report.append({'source': plan.name, 'fetched': len(postings), 'kept': len(kept),
                        'created': stats['created'], 'updated': stats['updated'],
-                       'ok': not (error and not postings)})
+                       'ok': not (error and not postings), 'error': error})
     return {'sources': report, 'new_jobs': total_created}

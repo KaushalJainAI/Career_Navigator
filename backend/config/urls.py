@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+from ai.views import AIStatusView
 from config.health import health
 
 api_v1 = [
@@ -22,6 +23,7 @@ api_v1 = [
     path('vault/', include('vault.urls')),
     path('portals/', include('portals.urls')),
     path('billing/', include('billing.urls')),
+    path('ai/status/', AIStatusView.as_view(), name='ai-status'),
 ]
 
 urlpatterns = [

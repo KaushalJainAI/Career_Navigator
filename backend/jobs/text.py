@@ -28,4 +28,10 @@ def description_to_text(raw: str) -> str:
                 out.append('')
             continue
         out.append(ln)
-    return '\n'.join(out).strip()
+    # No blank lines between consecutive bullets.
+    tidy: list[str] = []
+    for i, ln in enumerate(out):
+        if ln == '' and tidy and tidy[-1].startswith('• ') and i + 1 < len(out) and out[i + 1].startswith('• '):
+            continue
+        tidy.append(ln)
+    return '\n'.join(tidy).strip()

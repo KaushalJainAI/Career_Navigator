@@ -220,6 +220,14 @@ CODEX_CLI_MODEL = os.environ.get('CODEX_CLI_MODEL', '')
 CODEX_CLI_SANDBOX = os.environ.get('CODEX_CLI_SANDBOX', 'read-only')
 CODEX_CLI_TIMEOUT_SECONDS = int(os.environ.get('CODEX_CLI_TIMEOUT_SECONDS', '120'))
 CODEX_CLI_WORKDIR = os.environ.get('CODEX_CLI_WORKDIR', '').strip() or str(BASE_DIR)
+# "Bring your own subscription": run the platform's AI through a CLI the
+# operator is already logged into (Claude Code / Gemini CLI / Codex CLI).
+# Self-hosted only — the CLI uses the login of the machine running the backend.
+CLAUDE_CLI_COMMAND = os.environ.get('CLAUDE_CLI_COMMAND', 'claude')
+CLAUDE_CLI_MODEL = os.environ.get('CLAUDE_CLI_MODEL', '')
+GEMINI_CLI_COMMAND = os.environ.get('GEMINI_CLI_COMMAND', 'gemini')
+GEMINI_CLI_MODEL = os.environ.get('GEMINI_CLI_MODEL', '')
+CLI_TIMEOUT_SECONDS = int(os.environ.get('CLI_TIMEOUT_SECONDS', '120'))
 NVIDIA_TIMEOUT_SECONDS = int(os.environ.get('NVIDIA_TIMEOUT_SECONDS', '120'))
 NVIDIA_MAX_TOKENS = int(os.environ.get('NVIDIA_MAX_TOKENS', '2048'))
 

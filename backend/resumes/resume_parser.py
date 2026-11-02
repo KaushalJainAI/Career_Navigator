@@ -41,7 +41,9 @@ SECTION_ALIASES = {
                  'academic projects', 'side projects'],
     'other': ['certifications', 'certificates', 'awards', 'achievements', 'publications',
               'languages', 'interests', 'hobbies', 'volunteering', 'volunteer experience',
-              'references', 'activities', 'leadership', 'honors'],
+              'references', 'activities', 'leadership', 'honors', 'positions of responsibility',
+              'extracurricular activities', 'extra-curricular activities', 'relevant coursework', 'coursework',
+              'coding profiles', 'achievements & certifications', 'awards and achievements', 'hackathons'],
 }
 _HEADER_LOOKUP = {alias: key for key, aliases in SECTION_ALIASES.items() for alias in aliases}
 

@@ -177,7 +177,8 @@ def tailor(snapshot: dict, *, job_title: str, company: str, description: str,
                                                 f"{' '.join(p.get('tech_stack') or [])}", jd_tokens, jd_skills))
     projects = projects[:MAX_PROJECTS]
 
-    summary = compose_summary(snapshot, matched_skills=(matched + evidenced)[:4], best_bullet=best_bullet[0])
+    summary = compose_summary(snapshot, matched_skills=(matched + evidenced)[:4], best_bullet=best_bullet[0],
+                              best_project=projects[0] if projects else None)
 
     content = {
         **{k: snapshot.get(k) for k in ('full_name', 'headline', 'email', 'phone', 'location', 'links')},
@@ -216,11 +217,62 @@ def tailor(snapshot: dict, *, job_title: str, company: str, description: str,
     }
 
 
-def compose_summary(snapshot: dict, *, matched_skills: list[str], best_bullet: str) -> str:
+def _education_line(snapshot: dict) -> str:
+    eds = snapshot.get('educations') or []
+    if not eds:
+        return ''
+    ed = sorted(eds, key=lambda e: str(e.get('end') or ''), reverse=True)[0]
+    degree = ' '.join(x for x in [ed.get('degree'), ('in ' + ed['field_of_study']) if ed.get('field_of_study') else ''] if x)
+    year = str(ed.get('end') or '')[:4]
+    try:
+        upcoming = bool(year) and int(year) >= date.today().year
+    except ValueError:
+        upcoming = False
+    line = degree or 'Graduate'
+    if ed.get('institution'):
+        line += f" {'student at' if upcoming else 'from'} {ed['institution']}"
+    if year:
+        line += f" ({'graduating ' if upcoming else ''}{year}"
+        line += f", CGPA {ed['gpa']})" if ed.get('gpa') else ')'
+    elif ed.get('gpa'):
+        line += f" (CGPA {ed['gpa']})"
+    return line
+
+
+def is_early_career(snapshot: dict) -> bool:
+    exps = snapshot.get('experiences') or []
+    if not exps:
+        return True
+    titles = ' '.join(e.get('title', '') for e in exps).lower()
+    return _years(snapshot) < 1 or all('intern' in (e.get('title') or '').lower() for e in exps) and bool(titles)
+
+
+def compose_summary(snapshot: dict, *, matched_skills: list[str], best_bullet: str,
+                    best_project: dict | None = None) -> str:
     headline = (snapshot.get('headline') or '').strip()
     exps = snapshot.get('experiences') or []
     years = _years(snapshot)
     parts = []
+    if is_early_career(snapshot):
+        edu = _education_line(snapshot)
+        if edu:
+            parts.append(edu + '.')
+        elif headline:
+            parts.append(headline + '.')
+        interns = [e for e in exps if e.get('company')]
+        if interns:
+            parts.append(f"Interned at {', '.join(dict.fromkeys(e['company'] for e in interns[:2]))}.")
+        if matched_skills:
+            listed = ', '.join(matched_skills[:-1]) + f' and {matched_skills[-1]}' if len(matched_skills) > 1 else matched_skills[0]
+            parts.append(f'Hands-on with {listed}.')
+        if best_project and best_project.get('name'):
+            desc = (best_project.get('description') or '').strip().rstrip('.')
+            if len(desc) > 140:
+                desc = desc[:137].rsplit(' ', 1)[0] + '…'
+            parts.append(f"Built {best_project['name']}" + (f': {_sentence(desc)}.' if desc else '.'))
+        elif best_bullet:
+            parts.append(f'Highlight: {_sentence(best_bullet.rstrip("."))}.')
+        return ' '.join(parts) or (snapshot.get('summary') or '')
     role = headline or (exps[0].get('title') if exps else '')
     if role:
         lead = f'{role}'
@@ -351,7 +403,10 @@ def draft_cover_letter(snapshot: dict, tailored: dict, *, job_title: str, compan
 
     paras = [f'Dear {company} hiring team,']
     intro = f'I am applying for the {job_title} role.'
-    if headline:
+    early = is_early_career(snapshot)
+    if early and _education_line(snapshot):
+        intro += f' I am a {_education_line(snapshot)}.'
+    elif headline:
         who = f' I am a {headline}'
         if years >= 1:
             who += f' with {int(years)}+ years of experience'
@@ -368,7 +423,21 @@ def draft_cover_letter(snapshot: dict, tailored: dict, *, job_title: str, compan
     for e in exps[:3]:
         if e.get('bullets') and used < 2:
             b = e['bullets'][0].strip().rstrip('.')
-            evidence.append(f'At {e.get("company") or "a previous role"}, I {_sentence(b)}.')
+            label = f'During my internship at {e.get("company")}' if 'intern' in (e.get('title') or '').lower() \
+                else f'At {e.get("company") or "a previous role"}'
+            evidence.append(f'{label}, I {_sentence(b)}.')
+            used += 1
+    projects_used = 0
+    for p in (tailored['content'].get('projects') or [])[:2 if early else 1]:
+        if used >= 3 or not p.get('name'):
+            break
+        desc = (p.get('description') or '').strip().rstrip('.')
+        if desc:
+            if projects_used:
+                evidence.append(f'Another project: {p["name"]} — {_sentence(desc)}.')
+            else:
+                evidence.append(f'{"I also built" if used else "I built"} {p["name"]}: {_sentence(desc)}.')
+            projects_used += 1
             used += 1
     if evidence:
         paras.append(' '.join(evidence))

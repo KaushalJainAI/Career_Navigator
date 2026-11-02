@@ -1,0 +1,16 @@
+{
+  "name": "career-navigator",
+  "owner": {
+    "name": "Kaushal Jain"
+  },
+  "metadata": {
+    "description": "Career Navigator plugins for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "career-navigator",
+      "source": "./integrations/claude-code-plugin",
+      "description": "Manage your job search from Claude Code with your own subscription."
+    }
+  ]
+}
