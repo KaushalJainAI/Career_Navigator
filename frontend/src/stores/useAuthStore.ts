@@ -108,10 +108,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const me = await Auth.me();
       set({ user: me, loading: false, initialized: true });
-    } catch {
-      localStorage.removeItem('cn_access');
-      localStorage.removeItem('cn_refresh');
-      set({ user: null, loading: false, initialized: true });
+    } catch (e) {
+      // Only a rejected session logs you out; a server hiccup or offline
+      // moment must not wipe your tokens.
+      if ((e as AxiosError)?.response?.status === 401) {
+        localStorage.removeItem('cn_access');
+        localStorage.removeItem('cn_refresh');
+        set({ user: null, loading: false, initialized: true });
+      } else {
+        set({ loading: false, initialized: false, error: 'Cannot reach the server. Retrying…' });
+        setTimeout(() => { useAuthStore.getState().refresh(); }, 3000);
+      }
     }
   },
 }));

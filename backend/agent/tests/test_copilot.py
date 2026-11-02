@@ -65,6 +65,7 @@ def test_search_tailor_and_track_flow(auth_client, user):
     out = chat(auth_client, 'I got an OA from Zoho tomorrow at 10am', sid)
     pending = out['pending_action']
     assert pending and pending['tool'] == 'update_application' and pending['args']['status'] == 'assessment'
+    assert pending['summary'].startswith('Zoho — ') and 'Online assessment' in pending['summary']
     app.refresh_from_db()
     assert app.status == 'tailored'  # nothing changed before approval
     r = auth_client.post(f'/api/v1/agent/copilot/{sid}/approve/', {'action_id': pending['id'], 'approve': True}, format='json')
@@ -152,3 +153,17 @@ def test_router_never_targets_other_users_data(auth_client, user):
     Application.objects.create(user=other, job=_job('6', 'SDE', 'Secretco'))
     plan = route(user, 'I applied to Secretco')
     assert not (isinstance(plan, list) and plan[0][0] == 'update_application')
+
+
+def test_times_are_in_the_users_time_zone(auth_client, user):
+    _fresher(user)
+    app = Application.objects.create(user=user, job=_job('7', 'SDE', 'Zomato'))
+    r = auth_client.post('/api/v1/agent/copilot/', {'message': 'I got an OA from Zomato tomorrow at 3pm',
+                                                     'tz': 'Asia/Kolkata'}, format='json')
+    p = r.data['pending_action']
+    assert p['args']['next_round_at'].endswith('+05:30') and 'T15:00' in p['args']['next_round_at']
+    assert '3:00 PM' in p['summary']
+    auth_client.post(f"/api/v1/agent/copilot/{r.data['session_id']}/approve/", {'action_id': p['id'], 'approve': True}, format='json')
+    app.refresh_from_db()
+    from datetime import timezone as dt_tz
+    assert app.next_interview_at.astimezone(dt_tz.utc).hour == 9 and app.next_interview_at.minute == 30

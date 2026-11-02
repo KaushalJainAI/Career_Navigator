@@ -87,7 +87,7 @@ def _parse_llm(raw: str) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def llm_turn(user, message: str, history: list[dict], llm: Callable[[str], str]) -> dict:
+def llm_turn(user, message: str, history: list[dict], llm: Callable[[str], str], tz: str | None = None) -> dict:
     catalogue = json.dumps(schema(), ensure_ascii=False)
     convo = '\n'.join(f"{m['role'].upper()}: {m['content'][:800]}" for m in history[-HISTORY:])
     trajectory: list[dict] = []
@@ -95,7 +95,9 @@ def llm_turn(user, message: str, history: list[dict], llm: Callable[[str], str])
     for _ in range(MAX_STEPS):
         prior = '\n'.join(f"STEP {i + 1}: {json.dumps(t, default=str)[:1500]}" for i, t in enumerate(trajectory))
         prompt = (f'{SYSTEM_PROMPT}\n\nTOOLS: {catalogue}\n\nCONVERSATION:\n{convo}\nUSER: {message}\n\n'
-                  f'--- PRIOR STEPS ---\n{prior or "(none)"}\n--- END PRIOR STEPS ---\nToday is {date.today():%A %d %B %Y}.')
+                  f'--- PRIOR STEPS ---\n{prior or "(none)"}\n--- END PRIOR STEPS ---\n'
+                  f'Now: {timezone.localtime(timezone=_tzinfo(tz)):%A %d %B %Y %H:%M} (user time zone {tz or "server"}). '
+                  'Write date-times as ISO 8601 with that offset.')
         data = _parse_llm(llm(prompt) or '')
         if data is None:
             return {} if not steps else {'reply': summarise_steps(steps), 'steps': steps, 'ui': _ui_from(steps)}
@@ -107,8 +109,8 @@ def llm_turn(user, message: str, history: list[dict], llm: Callable[[str], str])
         for call in calls:
             args = call.get('args') if isinstance(call.get('args'), dict) else {}
             if TOOLS[call['name']].risk == CONFIRM:
-                pending = pending_for(call['name'], args)
-                return {'reply': f"I can do this — please confirm: {pending['summary']}",
+                pending = humanize_pending(user, pending_for(call['name'], args), tz)
+                return {'reply': data.get('reply') or 'Here is the change I will make — please confirm.',
                         'steps': steps, 'pending_action': pending, 'ui': _ui_from(steps)}
             obs = {'tool': call['name'], 'args': args, **execute(user, call['name'], args)}
             steps.append(obs)
@@ -122,9 +124,19 @@ MONTHS = {m: i for i, m in enumerate(['jan', 'feb', 'mar', 'apr', 'may', 'jun', 
 WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
 
 
-def parse_when(text: str, now: datetime | None = None) -> datetime | None:
-    """Find a date (and optional time) in free text. Returns aware datetime or None."""
-    now = now or timezone.localtime()
+def _tzinfo(tz: str | None):
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    try:
+        return ZoneInfo(tz) if tz else timezone.get_current_timezone()
+    except (ZoneInfoNotFoundError, ValueError):
+        return timezone.get_current_timezone()
+
+
+def parse_when(text: str, now: datetime | None = None, tz: str | None = None) -> datetime | None:
+    """Find a date (and optional time) in free text, in the user's time zone.
+    Returns an aware datetime or None."""
+    zone = _tzinfo(tz)
+    now = now.astimezone(zone) if now else timezone.localtime(timezone=zone)
     t = text.lower()
     d: date | None = None
     if m := re.search(r'\b(20\d\d)-(\d{1,2})-(\d{1,2})\b', t):
@@ -155,7 +167,7 @@ def parse_when(text: str, now: datetime | None = None) -> datetime | None:
         minute = int(m.group(2) or 0)
     elif m := re.search(r'\bat\s+(\d{1,2}):(\d{2})\b', t):
         hour, minute = int(m.group(1)), int(m.group(2))
-    return timezone.make_aware(datetime(d.year, d.month, d.day, hour, minute))
+    return datetime(d.year, d.month, d.day, hour, minute, tzinfo=zone)
 
 
 STATUS_PATTERNS = [
@@ -214,7 +226,7 @@ HELP = ("Here's what I can do — just ask in plain words:\n"
         "• \"Help me prepare for the Amazon HR round\"")
 
 
-def route(user, message: str) -> list[tuple[str, dict]] | str:
+def route(user, message: str, tz: str | None = None) -> list[tuple[str, dict]] | str:
     """Map a message to tool calls, or return a direct reply."""
     text = message.strip()
     low = text.lower()
@@ -282,7 +294,7 @@ def route(user, message: str) -> list[tuple[str, dict]] | str:
     # application updates
     comp = _match_company(user, text)
     if comp and comp[1]:
-        when = parse_when(text)
+        when = parse_when(text, tz=tz)
         for pattern, status in STATUS_PATTERNS:
             if re.search(pattern, low):
                 args = {'application_id': comp[1], 'status': status}
@@ -325,16 +337,49 @@ def route(user, message: str) -> list[tuple[str, dict]] | str:
     return "I'm not sure what you'd like me to do.\n\n" + HELP
 
 
-def rule_turn(user, message: str) -> dict:
-    plan = route(user, message)
+def humanize_pending(user, pending: dict, tz: str | None = None) -> dict:
+    """Make the approval card readable: company names and local dates, not ids/ISO."""
+    args = pending['args']
+    if pending['tool'] == 'update_application':
+        from .tools import _find_application
+        try:
+            app = _find_application(user, application_id=args.get('application_id'), company=args.get('company'))
+        except Exception:  # noqa: BLE001
+            return pending
+        labels = {'saved': 'Saved', 'tailored': 'Materials ready', 'ready': 'Ready to apply', 'applied': 'Applied',
+                  'assessment': 'Online assessment', 'phone': 'Interviewing', 'onsite': 'Final / HR round',
+                  'offer': 'Offer', 'rejected': 'Rejected', 'withdrawn': 'Withdrawn'}
+        bits = []
+        if args.get('status'):
+            bits.append(f"move to “{labels.get(args['status'], args['status'])}”")
+        if args.get('next_round_at'):
+            try:
+                dt = datetime.fromisoformat(args['next_round_at']).astimezone(_tzinfo(tz))
+                bits.append('next round ' + dt.strftime('%a %d %b, %I:%M %p').replace(' 0', ' '))
+            except ValueError:
+                pass
+        if args.get('deadline'):
+            try:
+                bits.append('apply-by date ' + date.fromisoformat(args['deadline'][:10]).strftime('%d %b'))
+            except ValueError:
+                pass
+        if args.get('notes'):
+            bits.append(f"add note “{args['notes'][:80]}”")
+        pending = {**pending, 'summary': f"{app.job.company.name} — {app.job.title}: " + ', '.join(bits)}
+    return pending
+
+
+def rule_turn(user, message: str, tz: str | None = None) -> dict:
+    plan = route(user, message, tz=tz)
     if isinstance(plan, str):
         return {'reply': plan, 'steps': [], 'ui': []}
     steps = []
     for name, args in plan:
         args = {k: v for k, v in args.items() if v not in (None, '')}
         if TOOLS[name].risk == CONFIRM:
-            pending = pending_for(name, args)
-            return {'reply': f"Shall I go ahead? {pending['summary']}", 'steps': steps, 'pending_action': pending, 'ui': []}
+            pending = humanize_pending(user, pending_for(name, args), tz)
+            return {'reply': 'Here is the change I will make — please confirm.', 'steps': steps,
+                    'pending_action': pending, 'ui': []}
         steps.append({'tool': name, 'args': args, **execute(user, name, args)})
     return {'reply': summarise_steps(steps), 'steps': steps, 'ui': _ui_from(steps)}
 

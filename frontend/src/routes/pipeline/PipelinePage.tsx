@@ -184,8 +184,8 @@ function ApplicationCard({ app, busy, flash, onStatus, onFollowUp }: RowProps) {
       }`}
     >
       <div className="min-w-0">
-        <p className="truncate font-bold text-slate-950">{job.company.name}</p>
-        <p className="truncate text-sm text-slate-600">{job.title}</p>
+        <p className="line-clamp-2 break-words font-bold text-slate-950">{job.company.name}</p>
+        <p className="line-clamp-2 text-sm text-slate-600">{job.title}</p>
       </div>
       <div className="mt-2">
         <Badge tone={statusTone(app.status)}>{STATUS_LABEL[app.status]}</Badge>

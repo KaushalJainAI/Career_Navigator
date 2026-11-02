@@ -155,6 +155,8 @@ def _extract_contact(text: str, head: list[str]) -> dict:
         elif 'github.com' in low and not out['github']:
             out['github'] = full
         elif not out['website'] and m.start() < 600 and len(low) > 5 \
+                and len(low.split('/')[0].split('.')[-2] if '.' in low.split('/')[0] else '') > 2 \
+                and not DEGREE_RE.fullmatch(url) \
                 and re.search(r'\.[a-z]{2,10}(?:/|$)', low) \
                 and not any(x in low for x in ('linkedin', 'github', 'gmail', 'outlook', 'yahoo', 'hotmail')) \
                 and not re.fullmatch(r'[\d.]+', low):

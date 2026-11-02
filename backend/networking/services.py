@@ -80,7 +80,7 @@ def draft_referral_message(*, user, contact: Contact, job: JobPosting | None = N
     greeting = contact.name.split()[0] if contact.name else 'there'
     body = (
         f'Hi {greeting},\n\n'
-        f'I am {user_name}. I came across{role_line or " a role that looks relevant"} and thought your perspective '
+        f'I am {user_name}. I came across {("the " + job.title + " role at " + job.company.name) if job else "a role that looks relevant"} and thought your perspective '
         'could be really helpful. If you are open to it, I would appreciate a quick pointer on whether the team is '
         'actively hiring and whether my background looks worth referring.\n\n'
         'I can send a short resume summary or the job link if useful. Thanks either way.'

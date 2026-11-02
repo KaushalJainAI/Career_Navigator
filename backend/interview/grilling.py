@@ -139,6 +139,29 @@ def evaluate_answer(question: dict, answer: str, *, llm: Callable | None = None)
     return _parse_eval(raw, fallback=_heuristic_evaluate(question, answer))
 
 
+_Q_STOP = set("""tell me about time what your most complex thing built make made did trade offs trade-offs walk through
+how would you why want work were was have with that this they them their when where which there here describe
+give example explain difference between role involves something similar specific contribution measure success
+first month team uses isn't résumé resume question questions interview answer like does do the and for from into
+over under using used use under would could should will about your yours you're""".split())
+
+
+def _keywords(text: str) -> set[str]:
+    import re as _re
+    words = _re.findall(r"[A-Za-z][A-Za-z+#.]{2,}", text or '')
+    return {w.lower().rstrip('.')[:6] for w in words if w.lower().rstrip('.') not in _Q_STOP and len(w) > 3}
+
+
+def _relevance(question: str, answer: str) -> float:
+    """Share of the question's key terms the answer engages with (prefix match)."""
+    q = _keywords(question)
+    if not q:
+        return 1.0
+    a = _keywords(answer)
+    hit = len(q & a)
+    return 1.0 if hit >= 2 or hit / len(q) >= 0.34 else (0.6 if hit else 0.25)
+
+
 def _heuristic_evaluate(question: dict, answer: str) -> dict:
     """STAR-style heuristic: structure, specificity, outcome, ownership.
 
@@ -168,13 +191,17 @@ def _heuristic_evaluate(question: dict, answer: str) -> dict:
     i_count = len(_re.findall(r'\bi\b', low))
     we_count = len(_re.findall(r'\bwe\b', low))
     ownership = 1.0 if i_count >= we_count else (0.6 if i_count else 0.3)
+    relevance = _relevance(question.get('prompt', ''), text) if n >= 5 else 1.0
     if short_ok:
         score = round((structure + specificity + ownership) / 3, 4)
     else:
         score = round(0.3 * structure + 0.25 * specificity + 0.3 * outcome + 0.15 * ownership, 4)
+    score = round(score * (0.4 + 0.6 * relevance), 4)
 
     weak: list[str] = []
     strengths: list[str] = []
+    if relevance < 0.6:
+        weak.append('answer the question that was asked — this reads like a prepared story for a different question')
     if n < (10 if short_ok else 40):
         weak.append('answer is too short — aim for 60–120 seconds when spoken')
     elif not short_ok and n > 350:
@@ -203,6 +230,7 @@ def _heuristic_evaluate(question: dict, answer: str) -> dict:
         'specificity': specificity,
         'outcome': outcome,
         'ownership': ownership,
+        'relevance': relevance,
         'score': score,
         'feedback': feedback,
         'strengths': strengths,
@@ -238,9 +266,24 @@ def summarise_session(turns: list[dict]) -> dict:
     counts = Counter(g for t in turns for g in t.get('gaps', []))
     ordered = [g for g, _ in counts.most_common()] + [g for g in gaps if g not in counts]
     gaps = ordered
-    study_plan = [{'topic': g[0].upper() + g[1:],
-                   'action': 'Rewrite your weakest answer with this fixed, then say it out loud and time yourself.'}
-                  for g in ordered][:5]
+    actions = {
+        'answer the question': 'For each common question, prepare a distinct 2–3 line story; practise mapping the question to the right one.',
+        'answer is too short': 'Use the STAR outline and time yourself: aim for 60–120 seconds per answer.',
+        'answer is long': 'Lead with one headline sentence, then at most three supporting details.',
+        'set the scene': 'Open every story with one line on where you were and what problem you faced.',
+        'say what you did': 'Rewrite your stories in first person ("I built…", "I decided…") and remove vague "we".',
+        'too much "we"': 'Mark which parts you personally did; say those out loud first.',
+        'finish with the measurable': 'Add one number to each story: users, time saved, % improvement, marks, rank.',
+        'quantify the result': 'Find one number per project (users, latency, accuracy, time saved) and memorise it.',
+    }
+
+    def action_for(g: str) -> str:
+        low = g.lower()
+        for key, act in actions.items():
+            if low.startswith(key):
+                return act
+        return 'Rewrite your weakest answer with this fixed, then say it out loud and time yourself.'
+    study_plan = [{'topic': g[0].upper() + g[1:], 'action': action_for(g)} for g in ordered][:5]
     return {
         'overall_score': overall,
         'strengths': strengths,

@@ -95,7 +95,7 @@ function Shell({ children }: { children: ReactNode }) {
 function Protected({ children }: { children: ReactNode }) {
   const user = useAuthStore((s) => s.user);
   const initialized = useAuthStore((s) => s.initialized);
-  if (!initialized) return <div className="p-6 text-sm text-slate-500">Loading…</div>;
+  if (!initialized) return <div className="p-6 text-sm text-slate-500">{useAuthStore.getState().error ? 'Reconnecting to the server…' : 'Loading…'}</div>;
   return user ? <>{children}</> : <Navigate to="/login" replace />;
 }
 

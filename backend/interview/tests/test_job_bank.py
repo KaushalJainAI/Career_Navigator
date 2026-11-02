@@ -52,3 +52,12 @@ def test_session_from_application_uses_job(auth_client, user):
     prompts = [q['prompt'] for q in r.data['questions']]
     assert any('Python' in p and 'first month' in p for p in prompts)
     assert any('streaming pipelines' in p for p in prompts)
+
+
+def test_off_topic_answer_is_penalised():
+    story = ('At my internship the support team triaged tickets by hand. I was asked to automate it. I designed a '
+             'REST API in Python and Flask and I added tests. The result: triage time dropped by 30% for 120 people.')
+    on = _heuristic_evaluate({'prompt': 'Walk me through the REST API you built in Python.', 'category': 'resume'}, story)
+    off = _heuristic_evaluate({'prompt': 'Why do you want to work at Zoho?', 'category': 'motivation'}, story)
+    assert on['score'] > off['score'] + 0.3
+    assert 'answer the question' in off['feedback']

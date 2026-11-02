@@ -57,9 +57,24 @@ def _skill_names(skills) -> list[str]:
     return out
 
 
+_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+
+def _fmt_date(value) -> str:
+    """'2025-05-01' -> 'May 2025'; '2026-01-01' (year only) -> '2026'."""
+    text = _clean(value)
+    m = re.fullmatch(r'(\d{4})-(\d{2})-(\d{2})(?:T.*)?', text)
+    if not m:
+        return text
+    year, month = m.group(1), int(m.group(2))
+    if month == 1 and m.group(3) == '01':
+        return year
+    return f'{_MONTHS[month - 1]} {year}'
+
+
 def _date_range(start, end, is_current=False) -> str:
-    start = _clean(start)
-    end = 'Present' if is_current else (_clean(end) or 'Present')
+    start = _fmt_date(start)
+    end = 'Present' if is_current else (_fmt_date(end) or 'Present')
     return f'{start} - {end}' if start else (end if end != 'Present' else '')
 
 
@@ -75,7 +90,7 @@ def _experience_header(exp: dict) -> str:
 def _education_header(edu: dict) -> str:
     degree = ' in '.join(p for p in (_clean(edu.get('degree')), _clean(edu.get('field_of_study'))) if p)
     head = ' - '.join(p for p in (degree, _clean(edu.get('institution'))) if p)
-    end = _clean(edu.get('end'))
+    end = _fmt_date(edu.get('end'))[-4:] if _clean(edu.get('end')) else ''
     return f'{head} ({end})' if head and end else (head or end)
 
 

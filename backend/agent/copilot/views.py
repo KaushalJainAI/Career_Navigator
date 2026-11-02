@@ -60,16 +60,17 @@ class CopilotChatView(APIView):
         history = _history(session)
         AgentMessage.objects.create(session=session, role='user', content=message)
         out: dict = {}
+        tz = (request.data.get('tz') or '').strip()[:64] or None
         llm = get_configured_llm()
         if llm is not None:
             try:
-                out = llm_turn(request.user, message, history, llm)
+                out = llm_turn(request.user, message, history, llm, tz=tz)
                 if out:
                     out['mode'] = configured_model_label()
             except Exception:  # noqa: BLE001 - provider hiccup: fall back to rules
                 out = {}
         if not out:
-            out = rule_turn(request.user, message)
+            out = rule_turn(request.user, message, tz=tz)
             out['mode'] = 'rules'
         return Response(_record(session, out))
 

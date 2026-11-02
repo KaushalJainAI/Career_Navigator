@@ -195,7 +195,8 @@ export const Copilot = {
   latest: () => api.get('/agent/copilot/latest/').then((r) => r.data),
   session: (id: number) => api.get(`/agent/copilot/${id}/`).then((r) => r.data),
   send: (message: string, session_id?: number | null) =>
-    api.post('/agent/copilot/', { message, session_id }, { timeout: 180000 }).then((r) => r.data),
+    api.post('/agent/copilot/', { message, session_id, tz: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      { timeout: 180000 }).then((r) => r.data),
   approve: (session_id: number, action_id: string, approve: boolean) =>
     api.post(`/agent/copilot/${session_id}/approve/`, { action_id, approve }, { timeout: 180000 }).then((r) => r.data),
 };
