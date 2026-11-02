@@ -328,15 +328,16 @@ _VERBISH = re.compile(r'^(?:build|design|develop|lead|own|drive|work|partner|cre
 
 
 def _jd_responsibility(jd_text: str, candidate_tokens: set[str]) -> str:
-    best, best_score = '', 0
+    best, best_score, first = '', 0, ''
     for line in jd_text.splitlines():
         line = line.strip('•-* ').strip()
         if not (20 <= len(line) <= 160) or not _VERBISH.match(line):
             continue
+        first = first or line
         score = len(set(tokenize(line)) & candidate_tokens)
         if score > best_score:
             best, best_score = line, score
-    return best.rstrip('.')
+    return (best or first).rstrip('.')
 
 
 def draft_cover_letter(snapshot: dict, tailored: dict, *, job_title: str, company: str,

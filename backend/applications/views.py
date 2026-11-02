@@ -31,12 +31,36 @@ class ApplicationDetailView(generics.RetrieveUpdateDestroyAPIView):
         return Application.objects.filter(user=self.request.user)
 
     def perform_update(self, serializer):
+        old_status = serializer.instance.status
         instance = serializer.save()
-        ApplicationEvent.objects.create(
-            application=instance,
-            type='status_changed',
-            payload={'status': instance.status},
-        )
+        if instance.status != old_status:
+            instance.apply_status_side_effects(old_status)
+            instance.save(update_fields=['applied_at', 'follow_up_at', 'updated_at'])
+            ApplicationEvent.objects.create(
+                application=instance,
+                type='status_changed',
+                payload={'status': instance.status, 'from': old_status},
+            )
+
+
+class FollowedUpView(APIView):
+    """Record that you followed up; the next nudge comes a week later."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        from datetime import timedelta
+
+        from django.utils import timezone
+        app = Application.objects.filter(pk=pk, user=request.user).first()
+        if app is None:
+            return Response({'detail': 'Not found.'}, status=404)
+        follow_ups = app.events.filter(type='followed_up').count()
+        ApplicationEvent.objects.create(application=app, type='followed_up', payload={'n': follow_ups + 1})
+        # Two polite follow-ups, then stop nagging.
+        app.follow_up_at = None if follow_ups >= 1 else timezone.now() + timedelta(days=Application.FOLLOW_UP_DAYS)
+        app.save(update_fields=['follow_up_at', 'updated_at'])
+        return Response(ApplicationSerializer(app).data)
 
 
 class ApproveAutoApplyView(APIView):
@@ -166,6 +190,14 @@ class DashboardStatsView(APIView):
             'saved_jobs': applications.filter(status=ApplicationStatus.SAVED).count(),
             'total_jobs': JobPosting.objects.count(),
         })
+
+
+class TodayView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .today import build_today
+        return Response(build_today(request.user))
 
 
 class ResponseAnalyticsView(APIView):

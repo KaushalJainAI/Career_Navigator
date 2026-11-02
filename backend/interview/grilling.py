@@ -122,24 +122,73 @@ def evaluate_answer(question: dict, answer: str, *, llm: Callable | None = None)
 
 
 def _heuristic_evaluate(question: dict, answer: str) -> dict:
-    n = len((answer or '').split())
-    structure = min(1.0, n / 60)
-    specificity = 1.0 if any(t.isdigit() for t in (answer or '').split()) else 0.4
-    outcome = 1.0 if any(w in answer.lower() for w in ('result', 'impact', 'shipped', 'increased', 'reduced')) else 0.3
-    score = round((structure + specificity + outcome) / 3, 4)
-    weak = []
-    if structure < 0.5:
-        weak.append('add a clear situation→task→action→result arc')
-    if specificity < 0.5:
-        weak.append('cite a specific metric or number')
-    if outcome < 0.5:
-        weak.append('describe the measurable outcome / impact')
+    """STAR-style heuristic: structure, specificity, outcome, ownership.
+
+    Not a substitute for a human, but it catches the four most common
+    weaknesses in practice answers and says exactly what to fix."""
+    import re as _re
+    text = answer or ''
+    low = text.lower()
+    words = text.split()
+    n = len(words)
+    category = question.get('category', '')
+    short_ok = category == 'recruiter' or 'salary' in question.get('prompt', '').lower()
+
+    # structure: a context → action → result arc, and a sensible length
+    has_context = bool(_re.search(r'\b(when|at my|in my|our team|the project|we had|there was|i was)\b', low))
+    has_action = bool(_re.search(r'\b(i (built|led|designed|wrote|decided|created|owned|proposed|drove|fixed|'
+                                 r'implemented|migrated|shipped|ran|set up|introduced|talked|worked))\b', low))
+    has_result = bool(_re.search(r'\b(result|resulted|so that|which (cut|reduced|increased|improved|saved)|'
+                                 r'impact|outcome|shipped|launched|reduced|increased|improved|saved|grew|cut)\b', low))
+    target = 25 if short_ok else 90
+    length = min(1.0, n / target)
+    structure = round(min(1.0, 0.4 * length + 0.2 * has_context + 0.2 * has_action + 0.2 * has_result), 3)
+    numbers = _re.findall(r'\d+(?:\.\d+)?\s*(?:%|x|ms|s|k|m|users|customers|people|engineers|hours|days|weeks)?',
+                          low)
+    specificity = round(min(1.0, 0.35 + 0.25 * len(numbers) + (0.2 if _re.search(r'[A-Z][a-z]+[A-Z]|[A-Z]{2,}', text) else 0)), 3)
+    outcome = 1.0 if has_result and numbers else (0.6 if has_result else 0.25)
+    i_count = len(_re.findall(r'\bi\b', low))
+    we_count = len(_re.findall(r'\bwe\b', low))
+    ownership = 1.0 if i_count >= we_count else (0.6 if i_count else 0.3)
+    if short_ok:
+        score = round((structure + specificity + ownership) / 3, 4)
+    else:
+        score = round(0.3 * structure + 0.25 * specificity + 0.3 * outcome + 0.15 * ownership, 4)
+
+    weak: list[str] = []
+    strengths: list[str] = []
+    if n < (10 if short_ok else 40):
+        weak.append('answer is too short — aim for 60–120 seconds when spoken')
+    elif not short_ok and n > 350:
+        weak.append('answer is long — lead with the headline, then the details')
+    if not short_ok:
+        if not has_context:
+            weak.append('set the scene first: where you were and what the problem was')
+        if not has_action:
+            weak.append('say what YOU did, with action verbs ("I designed…", "I led…")')
+        if outcome < 0.6:
+            weak.append('finish with the measurable result (numbers, before/after)')
+        elif outcome < 1.0:
+            weak.append('quantify the result — a number makes it memorable')
+        if ownership < 1.0 and we_count > 2:
+            weak.append('too much "we" — make your own contribution clear')
+    if numbers:
+        strengths.append('uses concrete numbers')
+    if has_action:
+        strengths.append('clear personal ownership')
+    if has_result:
+        strengths.append('ends with an outcome')
+    feedback = ('Strong: ' + ', '.join(strengths) + '.') if not weak else \
+        ('Improve: ' + '; '.join(weak) + '.' + (f' Good: {", ".join(strengths)}.' if strengths else ''))
     return {
         'structure': structure,
         'specificity': specificity,
         'outcome': outcome,
+        'ownership': ownership,
         'score': score,
-        'feedback': '; '.join(weak) or 'Strong, specific, outcome-driven.',
+        'feedback': feedback,
+        'strengths': strengths,
+        'gaps': weak,
         'drill_focus': weak[0] if weak else None,
     }
 
@@ -167,10 +216,89 @@ def summarise_session(turns: list[dict]) -> dict:
     } | {
         t['drill_focus'] for t in turns if t.get('drill_focus')
     })
-    study_plan = [{'topic': g, 'action': f'Practice 3 examples that fix: {g}'} for g in gaps][:5]
+    from collections import Counter
+    counts = Counter(g for t in turns for g in t.get('gaps', []))
+    ordered = [g for g, _ in counts.most_common()] + [g for g in gaps if g not in counts]
+    gaps = ordered
+    study_plan = [{'topic': g[0].upper() + g[1:],
+                   'action': 'Rewrite your weakest answer with this fixed, then say it out loud and time yourself.'}
+                  for g in ordered][:5]
     return {
         'overall_score': overall,
         'strengths': strengths,
         'gaps': gaps,
         'study_plan': study_plan,
     }
+
+
+# ---------------------------------------------------------------- job-aware bank
+
+def job_question_bank(*, role: str, company: str, stage: str, description: str = '',
+                      snapshot: dict | None = None, difficulty: str = 'medium', count: int = 7) -> list[dict]:
+    """Questions built from THIS job description and THIS candidate's résumé.
+
+    Deterministic: the skills the JD stresses that you have (prove it), the
+    ones you lack (how would you ramp up), the JD's own responsibilities,
+    a deep-dive on your strongest résumé bullet, plus stage staples."""
+    from jobs.text import description_to_text
+    from matching.fit import job_skill_weights
+    from tailoring.engine import _jd_responsibility, profile_skill_set, tailor
+
+    snapshot = snapshot or {}
+    jd_text = description_to_text(description)
+    weights = job_skill_weights(role, description)
+    have = profile_skill_set(snapshot) if snapshot else set()
+    ranked = sorted(weights, key=lambda s: -weights[s])
+    matched = [s for s in ranked if s.lower() in have]
+    missing = [s for s in ranked if s.lower() not in have]
+    company_label = company or 'this company'
+
+    def q(prompt, category, signals):
+        return {'prompt': prompt, 'category': category, 'difficulty': difficulty, 'expected_signals': signals}
+
+    star = ['situation', 'your actions', 'measurable result']
+    bank: list[dict] = []
+    best_bullet = ''
+    if snapshot.get('experiences'):
+        t = tailor(snapshot, job_title=role, company=company, description=description, jd_skills=weights)
+        for e in t['content']['experiences']:
+            if e.get('bullets'):
+                best_bullet = e['bullets'][0]
+                break
+    resp = _jd_responsibility(jd_text, set()) if jd_text else ''
+
+    if stage == 'recruiter':
+        bank += [
+            q(f'Walk me through your background and why it fits a {role} role.', 'recruiter', ['concise arc', 'relevance']),
+            q(f'Why {company_label}, and why now?', 'recruiter', ['company specifics', 'motivation']),
+            q('What are you looking for in your next role?', 'recruiter', ['clarity', 'alignment']),
+        ]
+        if matched:
+            bank.append(q(f'Give me a quick example of your work with {matched[0]}.', 'recruiter', star))
+        bank.append(q('What are your salary expectations and notice period?', 'recruiter', ['range', 'flexibility']))
+    else:
+        for s in matched[:2]:
+            bank.append(q(f'Tell me about the most complex thing you built with {s}. What trade-offs did you make?',
+                          'skill', ['context', 'trade-offs', 'outcome']))
+        if best_bullet:
+            bank.append(q(f'On your résumé: “{best_bullet.rstrip(".")}.” Walk me through it — what was your '
+                          'specific contribution and how did you measure success?', 'resume', star))
+        if resp:
+            bank.append(q(f'This role involves “{resp}”. Tell me about a time you did something similar.',
+                          'role', star))
+        for s in missing[:1]:
+            bank.append(q(f'The team uses {s}, which isn\'t on your résumé. How would you get productive with it '
+                          'in your first month?', 'gap', ['honesty', 'learning plan', 'transferable skills']))
+        if stage == 'system_design':
+            bank.insert(0, q(f'Design a core system {company_label} might run for this role\'s product area. '
+                             'Start with requirements, then scale it.', 'system_design',
+                             ['requirements', 'data model', 'scaling', 'trade-offs']))
+        bank.append(q(f'Why do you want to work at {company_label}?', 'motivation', ['company specifics', 'fit']))
+    seed = _seed_bank(role, 'behavioral' if stage in ('role_specific', 'tech_phone') else stage, difficulty, count)
+    seen = {b['prompt'] for b in bank}
+    for item in seed:
+        if len(bank) >= count:
+            break
+        if item['prompt'] not in seen:
+            bank.append(item)
+    return bank[:count]

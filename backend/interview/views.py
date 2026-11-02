@@ -8,6 +8,7 @@ from ai.providers import get_configured_llm
 from .grilling import (
     evaluate_answer,
     generate_question_bank,
+    job_question_bank,
     research,
     summarise_session,
 )
@@ -32,15 +33,40 @@ class SessionListCreateView(generics.ListCreateAPIView):
         return InterviewSession.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        session = serializer.save(user=self.request.user)
+        from applications.models import Application
+        from tailoring.engine import profile_snapshot
+
+        extra = {}
+        app_id = self.request.data.get('application')
+        if app_id:
+            app = Application.objects.select_related('job', 'job__company').filter(
+                pk=app_id, user=self.request.user).first()
+            if app is not None:
+                extra = {'job': app.job, 'company': app.job.company,
+                         'role': serializer.validated_data.get('role') or app.job.title}
+        session = serializer.save(user=self.request.user, **extra)
         company_name = session.company.name if session.company else session.research.get('company', '')
         llm = get_configured_llm()
         session.research = research(company_name or session.research.get('company', ''),
                                     session.role, session.stage, llm=llm)
-        bank = generate_question_bank(session.role, session.stage,
-                                      difficulty=session.difficulty,
-                                      research_notes=session.research,
-                                      llm=llm)
+        if session.job is not None and llm is None:
+            # No LLM: build the bank from this job description + the candidate's résumé.
+            bank = job_question_bank(role=session.role, company=company_name, stage=session.stage,
+                                     description=session.job.description,
+                                     snapshot=profile_snapshot(self.request.user),
+                                     difficulty=session.difficulty)
+        elif llm is None:
+            bank = job_question_bank(role=session.role, company=company_name, stage=session.stage,
+                                     snapshot=profile_snapshot(self.request.user),
+                                     difficulty=session.difficulty)
+        else:
+            notes = dict(session.research)
+            if session.job is not None:
+                notes['notes'] = f"{notes.get('notes', '')}\nJob description:\n{session.job.description[:4000]}"
+            bank = generate_question_bank(session.role, session.stage,
+                                          difficulty=session.difficulty,
+                                          research_notes=notes,
+                                          llm=llm)
         for idx, q in enumerate(bank):
             InterviewQuestion.objects.create(session=session, order=idx, **q)
         session.status = 'ready'

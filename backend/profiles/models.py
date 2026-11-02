@@ -81,3 +81,5 @@ class Preference(models.Model):
     stealth_mode = models.BooleanField(default=False)
     # Company boards the user follows, e.g. ["greenhouse:stripe", "lever:mistral"].
     watch_companies = models.JSONField(default=list, blank=True)
+    # Applications per week the user is aiming for (Today page progress).
+    weekly_goal = models.PositiveSmallIntegerField(default=5)

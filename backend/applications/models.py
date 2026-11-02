@@ -63,8 +63,32 @@ class Application(models.Model):
         AutoApplySession, null=True, blank=True, on_delete=models.SET_NULL, related_name='application'
     )
     notes = models.TextField(blank=True)
+    # Pipeline timing: when you applied, when a follow-up is due, and the next
+    # scheduled interview (drives the Today plan and interview prep prompts).
+    applied_at = models.DateTimeField(null=True, blank=True)
+    follow_up_at = models.DateTimeField(null=True, blank=True)
+    next_interview_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    FOLLOW_UP_DAYS = 7
+
+    def apply_status_side_effects(self, old_status: str | None, now=None) -> None:
+        """Keep timing fields consistent with a status change."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+        now = now or timezone.now()
+        if self.status == old_status:
+            return
+        if self.status == ApplicationStatus.APPLIED:
+            self.applied_at = self.applied_at or now
+            self.follow_up_at = self.follow_up_at or now + timedelta(days=self.FOLLOW_UP_DAYS)
+        elif self.status in (ApplicationStatus.PHONE, ApplicationStatus.ONSITE, ApplicationStatus.OFFER,
+                             ApplicationStatus.REJECTED, ApplicationStatus.WITHDRAWN):
+            self.follow_up_at = None
+            if self.status in (ApplicationStatus.PHONE, ApplicationStatus.ONSITE):
+                self.applied_at = self.applied_at or now
 
     class Meta:
         unique_together = [('user', 'job')]

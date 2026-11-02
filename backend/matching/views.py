@@ -71,6 +71,56 @@ class JobMatchView(APIView):
         return Response(data)
 
 
+def rank_for_user(user, *, q: str = '', remote: bool = False, hide_ghost: bool = True,
+                  only_new: bool = True, min_fit: int = 0) -> tuple[list, dict, Candidate]:
+    """Score every visible job for `user`; returns (rows, applications_by_job, candidate).
+    Each row is (job, fit_result | None), sorted best-first."""
+    from django.db.models import Q
+
+    cand = candidate_for(user)
+    qs = visible_jobs(user)
+    if q:
+        qs = qs.filter(Q(title__icontains=q) | Q(company__name__icontains=q) | Q(location__icontains=q))
+    if remote:
+        qs = qs.filter(remote=True)
+    if hide_ghost:
+        qs = qs.filter(ghost_risk__lt=60)
+    for name in cand.exclude_companies:
+        qs = qs.exclude(company__name__iexact=name)
+    apps = {a.job_id: a for a in Application.objects.filter(user=user)}
+    if only_new:
+        qs = qs.exclude(pk__in=[jid for jid, a in apps.items() if a.status != 'saved'])
+    jobs = list(qs.order_by('-created_at')[:FEED_SCAN_LIMIT])
+    texts = {j.pk: tokenize(f'{j.title} {description_to_text(j.description)}') for j in jobs}
+    corpus = Corpus(list(texts.values()) or [[]])
+    rows = []
+    for j in jobs:
+        r = score_fit(cand, title=j.title, description=j.description, location=j.location, remote=j.remote,
+                      skills=_job_skills(j), corpus=corpus, job_tokens=texts[j.pk]) if cand.has_data else None
+        rows.append((j, r))
+    if cand.has_data:
+        rows = [x for x in rows if x[1]['fit'] >= min_fit]
+        rows.sort(key=lambda x: (-x[1]['fit'], x[0].ghost_risk))
+    return rows, apps, cand
+
+
+def feed_row(j, r, app) -> dict:
+    return {
+        'id': j.pk, 'title': j.title,
+        'company': {'id': j.company_id, 'name': j.company.name, 'domain': j.company.domain},
+        'location': j.location, 'remote': j.remote, 'apply_url': j.apply_url,
+        'posted_at': j.posted_at, 'created_at': j.created_at,
+        'salary_min': j.salary_min, 'salary_max': j.salary_max, 'salary_currency': j.salary_currency,
+        'source': j.source.name,
+        'ghost_risk': j.ghost_risk, 'ghost_band': band_for(j.ghost_risk),
+        'fit': r['fit'] if r else None, 'verdict': r['verdict'] if r else None,
+        'matched_skills': r['matched_skills'][:6] if r else [],
+        'missing_skills': r['missing_skills'][:4] if r else [],
+        'reasons': r['explanation'][:3] if r else [],
+        'application': {'id': app.id, 'status': app.status} if app else None,
+    }
+
+
 class FeedView(APIView):
     """Jobs ranked by fit for the current user.
 
@@ -82,67 +132,22 @@ class FeedView(APIView):
 
     def get(self, request):
         p = request.query_params
-        cand = candidate_for(request.user)
-        qs = visible_jobs(request.user)
-        q = (p.get('q') or '').strip()
-        if q:
-            from django.db.models import Q
-            qs = qs.filter(Q(title__icontains=q) | Q(company__name__icontains=q) | Q(location__icontains=q))
-        if p.get('remote') in {'1', 'true'}:
-            qs = qs.filter(remote=True)
-        if p.get('hide_ghost', '1') in {'1', 'true'}:
-            qs = qs.filter(ghost_risk__lt=60)
-        if cand.exclude_companies:
-            for name in cand.exclude_companies:
-                qs = qs.exclude(company__name__iexact=name)
-        apps = {a.job_id: a for a in Application.objects.filter(user=request.user)}
-        if p.get('status', 'new') == 'new':
-            hidden = [jid for jid, a in apps.items() if a.status not in ('saved',)]
-            qs = qs.exclude(pk__in=hidden)
-        jobs = list(qs.order_by('-created_at')[:FEED_SCAN_LIMIT])
-        total_jobs = visible_jobs(request.user).count()
-
-        texts = {j.pk: tokenize(f'{j.title} {description_to_text(j.description)}') for j in jobs}
-        corpus = Corpus(list(texts.values()) or [[]])
-        rows = []
-        for j in jobs:
-            if cand.has_data:
-                r = score_fit(cand, title=j.title, description=j.description, location=j.location,
-                              remote=j.remote, skills=_job_skills(j), corpus=corpus, job_tokens=texts[j.pk])
-            else:
-                r = None
-            rows.append((j, r))
         try:
             min_fit = int(p.get('min_fit', 0))
         except ValueError:
             min_fit = 0
-        if cand.has_data:
-            rows = [x for x in rows if x[1]['fit'] >= min_fit]
-            rows.sort(key=lambda x: (-x[1]['fit'], x[0].ghost_risk))
+        rows, apps, cand = rank_for_user(
+            request.user, q=(p.get('q') or '').strip(), remote=p.get('remote') in {'1', 'true'},
+            hide_ghost=p.get('hide_ghost', '1') in {'1', 'true'}, only_new=p.get('status', 'new') == 'new',
+            min_fit=min_fit)
         try:
             limit = max(1, min(100, int(p.get('limit', 30))))
             offset = max(0, int(p.get('offset', 0)))
         except ValueError:
             limit, offset = 30, 0
         page = rows[offset:offset + limit]
-        results = []
-        for j, r in page:
-            app = apps.get(j.pk)
-            results.append({
-                'id': j.pk, 'title': j.title,
-                'company': {'id': j.company_id, 'name': j.company.name, 'domain': j.company.domain},
-                'location': j.location, 'remote': j.remote, 'apply_url': j.apply_url,
-                'posted_at': j.posted_at, 'created_at': j.created_at,
-                'salary_min': j.salary_min, 'salary_max': j.salary_max, 'salary_currency': j.salary_currency,
-                'source': j.source.name,
-                'ghost_risk': j.ghost_risk, 'ghost_band': band_for(j.ghost_risk),
-                'fit': r['fit'] if r else None, 'verdict': r['verdict'] if r else None,
-                'matched_skills': r['matched_skills'][:6] if r else [],
-                'missing_skills': r['missing_skills'][:4] if r else [],
-                'reasons': r['explanation'][:3] if r else [],
-                'application': {'id': app.id, 'status': app.status} if app else None,
-            })
         return Response({
-            'count': len(rows), 'total_jobs': total_jobs, 'has_profile': cand.has_data,
-            'results': results,
+            'count': len(rows), 'total_jobs': visible_jobs(request.user).count(),
+            'has_profile': cand.has_data,
+            'results': [feed_row(j, r, apps.get(j.pk)) for j, r in page],
         })
