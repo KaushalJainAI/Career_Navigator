@@ -7,6 +7,9 @@ import io
 from typing import IO
 import re
 
+from .resume_parser import parse_resume
+from .skills import extract_skills
+
 try:
     from pypdf import PdfReader
 except ImportError:  # pragma: no cover - optional at import time
@@ -30,64 +33,29 @@ def extract_text(file: IO[bytes], filename: str) -> str:
         if docx is None:
             raise RuntimeError('python-docx is not installed')
         document = docx.Document(io.BytesIO(data))
-        return '\n'.join(p.text for p in document.paragraphs)
+        lines = [p.text for p in document.paragraphs]
+        # Many résumé templates lay sections out in tables; keep that text too.
+        for table in document.tables:
+            for row in table.rows:
+                seen_cells = set()
+                for cell in row.cells:
+                    if id(cell._tc) in seen_cells:
+                        continue
+                    seen_cells.add(id(cell._tc))
+                    lines.extend(p.text for p in cell.paragraphs)
+        return '\n'.join(lines)
     # Fallback: treat as plain text
     return data.decode('utf-8', errors='ignore')
 
 
 def naive_structured_parse(text: str) -> dict:
-    """Cheap rule-based parser used as a fallback when no LLM is available.
-    Tests use this path; production uses an LLM call (see resumes.tasks)."""
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    skills = [{'name': name} for name in extract_skill_names(text)]
-    return {
-        'raw_text': text,
-        'summary': ' '.join(lines[:3]),
-        'skills': skills,
-        'experiences': [],
-        'educations': [],
-    }
+    """Rule-based structured parse used when no LLM is available.
 
-
-SKILL_KEYWORDS = [
-    'python', 'django', 'flask', 'fastapi', 'javascript', 'typescript', 'react',
-    'node', 'node.js', 'java', 'spring', 'c++', 'c#', 'go', 'golang', 'rust',
-    'sql', 'postgres', 'postgresql', 'mysql', 'mongodb', 'redis', 'kafka',
-    'aws', 'azure', 'gcp', 'docker', 'kubernetes', 'terraform', 'graphql',
-    'rest', 'celery', 'elasticsearch', 'pandas', 'numpy', 'pytorch',
-    'tensorflow', 'scikit-learn', 'machine learning', 'llm', 'langchain',
-]
+    Kept for backwards compatibility; delegates to `parse_resume`, which pulls
+    out contact info, sections, experience entries, education and skills."""
+    return parse_resume(text)
 
 
 def extract_skill_names(text: str) -> list[str]:
-    haystack = f' {text.lower()} '
-    found = []
-    seen = set()
-    for skill in SKILL_KEYWORDS:
-        pattern = r'(?<![a-z0-9+#])' + re.escape(skill) + r'(?![a-z0-9+#])'
-        if re.search(pattern, haystack):
-            label = _skill_label(skill)
-            key = label.lower()
-            if key not in seen:
-                seen.add(key)
-                found.append(label)
-    return found
-
-
-def _skill_label(skill: str) -> str:
-    special = {
-        'node.js': 'Node.js',
-        'c++': 'C++',
-        'c#': 'C#',
-        'sql': 'SQL',
-        'aws': 'AWS',
-        'azure': 'Azure',
-        'gcp': 'GCP',
-        'llm': 'LLM',
-        'rest': 'REST',
-        'typescript': 'TypeScript',
-        'javascript': 'JavaScript',
-        'postgresql': 'PostgreSQL',
-        'mysql': 'MySQL',
-    }
-    return special.get(skill, skill.title())
+    """Canonical skill names mentioned in `text` (see resumes.skills)."""
+    return extract_skills(text)

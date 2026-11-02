@@ -30,8 +30,8 @@ def test_match_endpoint_returns_explanation_and_caches_it(auth_client, user):
     response = auth_client.get(f'/api/v1/matching/jobs/{job.id}/')
 
     assert response.status_code == 200
-    assert 'python' in response.data['matched_skills']
-    assert 'kafka' in response.data['gaps']
+    assert 'Python' in response.data['matched_skills']
+    assert 'Kafka' in response.data['gaps']
     assert response.data['explanation']
     assert any(item['kind'] == 'negative' for item in response.data['explanation'])
 

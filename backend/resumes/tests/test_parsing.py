@@ -18,4 +18,4 @@ def test_naive_structured_parse():
 
 def test_extract_skill_names_uses_known_keyword_boundaries():
     skills = extract_skill_names('Built REST APIs with TypeScript, React, PostgreSQL, and Kafka.')
-    assert skills == ['TypeScript', 'React', 'PostgreSQL', 'Kafka', 'REST']
+    assert set(skills) == {'TypeScript', 'React', 'PostgreSQL', 'Kafka', 'REST'}

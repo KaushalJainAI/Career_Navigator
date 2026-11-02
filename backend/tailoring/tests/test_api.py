@@ -95,3 +95,42 @@ def test_export_resume_docx_returns_attachment(auth_client, user):
     assert 'wordprocessingml' in response['Content-Type']
     assert response['Content-Disposition'].endswith('resume-ats.docx"')
     assert len(response.content) > 0
+
+
+def _profile_user(user):
+    profile = StructuredProfile.objects.create(user=user, full_name='Jane Doe', headline='Backend Engineer')
+    Skill.objects.create(profile=profile, name='Python')
+    Experience.objects.create(profile=profile, company='Acme', title='Senior Engineer',
+                              bullets=['Ran the offsite', 'Built Django APIs for payments'])
+    return profile
+
+
+def test_tailor_by_job_id_creates_application_and_export_uses_tailored(auth_client, user):
+    _profile_user(user)
+    app = _application(user)
+    app.delete()
+    from jobs.models import JobPosting
+    job = JobPosting.objects.get(external_id='tailor-1')
+    r = auth_client.post('/api/v1/tailoring/resume/', {'job_id': job.id}, format='json')
+    assert r.status_code == 200, r.data
+    assert r.data['content']['experiences'][0]['bullets'][0] == 'Built Django APIs for payments'
+    assert r.data['diff_from_master']['keyword_coverage'] is not None
+    app_id = r.data['application_id']
+    # user edits a bullet; export reflects the edit
+    r2 = auth_client.patch(f"/api/v1/tailoring/resume/{r.data['id']}/", {'content': {
+        'summary': 'Edited summary.', 'experiences': [{'bullets': ['Shipped payments APIs in Django']}]}},
+        format='json')
+    assert r2.status_code == 200
+    assert r2.data['content']['experiences'][0]['company'] == 'Acme'
+    body = auth_client.get(f'/api/v1/tailoring/resume/export/?application_id={app_id}').content.decode()
+    assert 'Edited summary.' in body and '- Shipped payments APIs in Django' in body
+    assert auth_client.get(f'/api/v1/tailoring/resume/?application_id={app_id}').status_code == 200
+
+
+def test_cover_letter_edit_roundtrip(auth_client, user):
+    _profile_user(user)
+    app = _application(user)
+    r = auth_client.post('/api/v1/tailoring/cover-letter/', {'application_id': app.id}, format='json')
+    assert r.status_code == 200 and 'Dear Tailor Co hiring team' in r.data['content']
+    r2 = auth_client.patch(f"/api/v1/tailoring/cover-letter/{r.data['id']}/", {'content': 'Mine now.'}, format='json')
+    assert r2.data['content'] == 'Mine now.'

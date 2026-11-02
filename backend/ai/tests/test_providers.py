@@ -23,7 +23,14 @@ def test_get_configured_llm_returns_codex_callable(settings):
 
 def test_get_configured_llm_returns_nvidia_callable(settings):
     settings.AI_PROVIDER = 'nvidia'
+    settings.NVIDIA_API_KEY = 'nvapi-test'
     assert get_configured_llm() is nvidia_complete
+
+
+def test_get_configured_llm_is_none_without_nvidia_key(settings):
+    settings.AI_PROVIDER = 'nvidia'
+    settings.NVIDIA_API_KEY = ''
+    assert get_configured_llm() is None
 
 
 def test_configured_model_label_includes_codex_model(settings):

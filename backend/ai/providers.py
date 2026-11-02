@@ -23,6 +23,10 @@ def get_configured_llm() -> Callable[[str], str] | None:
             return with_fallback(codex_cli_complete, nvidia_complete)
         return codex_cli_complete
     if provider == 'nvidia':
+        # No key means no model: callers fall back to their deterministic path
+        # instead of receiving silent empty completions.
+        if not getattr(settings, 'NVIDIA_API_KEY', '').strip():
+            return None
         return nvidia_complete
     return None
 

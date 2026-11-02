@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from jobs.ghost import assess_ghost_risk, content_fingerprint
 from jobs.models import Company, JobPosting, Source
+from matching.fit import job_skill_weights
 
 from .models import IngestionRun
 
@@ -71,6 +72,7 @@ def upsert_postings(source: Source, postings: list[dict]) -> dict:
             'repost_count': repost_count,
             'ghost_risk': risk['score'],
             'ghost_reasons': risk['reasons'],
+            'skills': job_skill_weights(p.get('title', ''), p.get('description', '')),
         }
         _, was_created = JobPosting.objects.update_or_create(
             source=source, external_id=p['external_id'], defaults=defaults,

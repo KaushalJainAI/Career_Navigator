@@ -79,3 +79,5 @@ class Preference(models.Model):
     exclude_companies = models.JSONField(default=list, blank=True)
     work_auth = models.CharField(max_length=64, blank=True)
     stealth_mode = models.BooleanField(default=False)
+    # Company boards the user follows, e.g. ["greenhouse:stripe", "lever:mistral"].
+    watch_companies = models.JSONField(default=list, blank=True)

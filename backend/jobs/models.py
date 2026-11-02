@@ -35,6 +35,7 @@ class Source(models.Model):
         ('web_search', 'Web search'),
         ('cli_delegate', 'CLI delegate'),
         ('linkedin', 'LinkedIn (best-effort)'),
+        ('manual', 'Added by a user'),
     ]
 
     name = models.CharField(max_length=128, unique=True)
@@ -72,6 +73,9 @@ class JobPosting(models.Model):
     repost_count = models.PositiveIntegerField(default=0)
     ghost_risk = models.PositiveSmallIntegerField(default=0, db_index=True)
     ghost_reasons = models.JSONField(default=list, blank=True)
+    # Canonical skills the JD asks for, with a weight (mentions; title x3).
+    # Computed at ingestion so the ranked feed never re-parses descriptions.
+    skills = models.JSONField(default=dict, blank=True)
 
     class Meta:
         unique_together = [('source', 'external_id')]

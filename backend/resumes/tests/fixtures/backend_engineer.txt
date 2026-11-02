@@ -1,0 +1,30 @@
+PRIYA SHARMA
+Senior Backend Engineer
+priya.sharma@gmail.com | +91 98765 43210 | Bengaluru, India | linkedin.com/in/priyasharma | github.com/priyas
+
+SUMMARY
+Backend engineer with 6 years building high-throughput APIs and data pipelines in Python and Go.
+
+EXPERIENCE
+Senior Software Engineer — Razorpay                     Jan 2021 – Present
+• Designed a payments reconciliation service in Go processing 3M transactions/day, cutting mismatches by 40%.
+• Led migration from a monolith to microservices on Kubernetes (AWS EKS); reduced p99 latency from 900ms to
+  220ms.
+• Mentored 4 engineers and ran code reviews for the platform team.
+
+Flipkart
+Software Engineer
+Jul 2018 - Dec 2020
+- Built Django REST APIs for the seller dashboard used by 200k sellers.
+- Introduced Kafka-based event pipeline and Redis caching; improved throughput 3x.
+
+EDUCATION
+Indian Institute of Technology, Delhi
+B.Tech in Computer Science, 2014 - 2018, CGPA: 8.6/10
+
+SKILLS
+Languages: Python, Go, SQL, TypeScript
+Infra: Docker, Kubernetes, Terraform, AWS, PostgreSQL, Redis, Kafka
+
+PROJECTS
+OpenLedger | Open-source double-entry ledger in Go with gRPC API (github.com/priyas/openledger)
