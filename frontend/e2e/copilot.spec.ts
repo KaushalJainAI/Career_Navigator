@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { mockCareerNavigatorApi } from './api-mocks';
 
 const SESSION_ID = 77;

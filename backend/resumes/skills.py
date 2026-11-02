@@ -66,7 +66,9 @@ SKILLS: dict[str, list[str]] = {
     'Google Analytics': [], 'Salesforce': [], 'HubSpot': [], 'Jira': [], 'Confluence': [],
     'Stakeholder Management': ['stakeholders'], 'Project Management': ['program management'],
     'Leadership': ['team lead', 'tech lead', 'people management', 'mentoring', 'mentorship'],
-    'Communication': ['written communication', 'presentation skills'],
+    # Only explicit phrasing counts — "Electronics and Communication Engineering" is a degree, not a skill.
+    'Communication Skills': ['communication skills', 'written communication', 'verbal communication',
+                             'presentation skills', 'public speaking'],
     'Financial Modeling': ['financial modelling'], 'Sales': ['business development'],
     'Customer Success': [], 'Copywriting': [], 'Operations': [],
 }

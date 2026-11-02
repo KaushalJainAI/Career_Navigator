@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { PROFILE, mockCareerNavigatorApi } from './api-mocks';
 
 const RESUME_TEXT = `Aarav Sharma

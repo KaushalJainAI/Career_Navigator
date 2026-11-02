@@ -58,3 +58,14 @@ def test_skill_aliases_and_ambiguity():
     found = extract_skills('Ran ML models on k8s with postgres. I like to go hiking.')
     assert 'Machine Learning' in found and 'Kubernetes' in found and 'PostgreSQL' in found
     assert 'Go' not in found  # lower-case "go" is English, not Golang
+
+
+def test_school_line_and_degree_words_are_not_skills():
+    d = parse_resume('Sneha Iyer\nsneha@x.com\n\nEDUCATION\nNational Institute of Technology, Warangal\n'
+                     'B.Tech in Electronics and Communication Engineering | 2022 - 2026 | CGPA: 7.9/10\n'
+                     'Narayana Junior College — Class XII, 2022, 94%\n\nSKILLS\nPython, SQL')
+    school = d['educations'][1]
+    assert (school['institution'], school['degree'], school['gpa']) == ('Narayana Junior College', 'Class XII', '94%')
+    assert d['educations'][0]['gpa'] == '7.9/10'
+    names = {s['name'] for s in d['skills']}
+    assert 'Communication Skills' not in names and 'Communication' not in names

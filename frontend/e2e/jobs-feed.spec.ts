@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { company, feedJob, mockCareerNavigatorApi } from './api-mocks';
 
 const zoho = feedJob({
@@ -52,10 +52,20 @@ test('adding a job manually posts the details and opens its workspace', async ({
   const api = await mockCareerNavigatorApi(page);
   const deadline = '2026-11-14';
 
+  api.on('GET', '/matching/feed/', () => ({ count: 1, total_jobs: 1, has_profile: true, results: [zoho] }));
   api.on('POST', '/jobs/add/', () => ({
     id: 330,
     application_id: 931,
     job: { id: 330, title: 'Software Engineer Intern' },
+  }));
+  api.on('GET', '/matching/jobs/330/', () => ({
+    fit: 64,
+    score: 0.64,
+    verdict: 'good',
+    matched_skills: ['Python'],
+    missing_skills: ['Docker'],
+    explanation: [{ kind: 'positive', title: 'Python matches', detail: 'Python is on your résumé' }],
+    breakdown: { skills: 0.5, title: 0.6, text: 0.7, location: 1, seniority_penalty: 0 },
   }));
   api.on('GET', '/jobs/330/', () => ({
     id: 330,

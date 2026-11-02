@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { mockCareerNavigatorApi } from './api-mocks';
 
 test('signed-out visitors are sent to the login page', async ({ page }) => {

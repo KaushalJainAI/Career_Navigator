@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { application, company, isoFromNow, mockCareerNavigatorApi, ymdFromNow } from './api-mocks';
 
 test('pipeline groups applications into stage columns and status changes save', async ({ page }) => {

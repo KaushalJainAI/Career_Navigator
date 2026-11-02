@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { EMPTY_TODAY, mockCareerNavigatorApi } from './api-mocks';
 
 test('Today lists the next steps and logs a follow-up', async ({ page }) => {

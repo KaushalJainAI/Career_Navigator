@@ -78,6 +78,8 @@ DEGREE_RE = re.compile(
     r'\b(b\.?\s?s\.?c?|b\.?\s?a\.?|b\.?\s?tech|b\.?\s?e\.?|bachelor(?:\'s)?|m\.?\s?s\.?c?|m\.?\s?a\.?|'
     r'm\.?\s?tech|m\.?\s?e\.?|master(?:\'s)?|mba|ph\.?\s?d|doctorate|diploma|associate(?:\'s)? degree|'
     r'high school|hsc|ssc|b\.?com|m\.?com|bca|mca|bba|bfa|mfa|b\.?eng|m\.?eng|a\.?b\.?|llb|llm|md)\b', re.IGNORECASE)
+SCHOOL_RE = re.compile(r'\b(class\s*(?:x|xii|10|12)(?:th)?|xii|xth|12th|10th|hsc|ssc|cbse|icse|isc|'
+                       r'higher secondary|secondary school|intermediate|puc)\b', re.IGNORECASE)
 GPA_RE = re.compile(r'\b(?:gpa|cgpa|cpi)\s*[:\-]?\s*(\d+(?:\.\d+)?(?:\s*/\s*\d+(?:\.\d+)?)?)', re.IGNORECASE)
 LOCATION_RE = re.compile(
     r'\b([A-Z][a-zA-Z.\- ]{1,30},\s*(?:[A-Z]{2}\b|[A-Z][a-zA-Z ]{2,30}))')
@@ -363,7 +365,17 @@ def parse_education(lines: list[str]) -> list[dict]:
         text = GPA_RE.sub('', text)
         text = re.sub(r'\b(19[5-9]\d|20\d\d)\b', '', text).strip(' ,|()-–—')
         if is_inst and not degree_m and not current['institution']:
-            current['institution'] = text[:255]
+            parts = _split_header_parts(re.sub(r'\s*[—–]\s*', ' | ', line)) or [text]
+            inst = next((p for p in parts if INSTITUTION_WORDS.search(p)), parts[0])
+            current['institution'] = re.sub(r'\b(19[5-9]\d|20\d\d)\b', '', inst).strip(' ,|()-–—')[:255]
+            for p in parts:
+                if p == inst:
+                    continue
+                if SCHOOL_RE.search(p) and not current['degree']:
+                    current['degree'] = re.sub(r'\b(19[5-9]\d|20\d\d)\b|\d+(?:\.\d+)?\s*%', '', p).strip(' ,|()-–—')[:255]
+                pct = re.search(r'(\d{2,3}(?:\.\d+)?)\s*%', p)
+                if pct and not current['gpa']:
+                    current['gpa'] = f'{pct.group(1)}%'
             continue
         for part in _split_header_parts(text) or [text]:
             if INSTITUTION_WORDS.search(part) and not current['institution']:

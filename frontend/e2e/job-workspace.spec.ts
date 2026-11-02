@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { company, httpError, mockCareerNavigatorApi } from './api-mocks';
 
 const JOB_ID = 201;
