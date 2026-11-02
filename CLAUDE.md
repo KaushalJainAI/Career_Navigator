@@ -74,6 +74,14 @@ Despite `faiss-cpu` and `sentence-transformers` being in `backend/requirements.t
 
 `config/urls.py` mounts every app under `api/v1/<app>/`. Browser extension talks to `/api/v1/ext/...`. WebSockets live at `/ws/notifications/` and `/ws/interview/<id>/` (routing in `streaming/routing.py`).
 
+### 9. Copilot tools are user-scoped and risk-tiered
+
+`backend/agent/copilot/tools.py` tools receive the authenticated `user` from the orchestrator — never accept a user id from model arguments. `risk='confirm'` tools (anything that changes records) must pause the loop and go through `CopilotApproveView`, or require `confirmed: true` on the MCP/tool endpoint. No copilot tool submits applications or sends messages to third parties. The deterministic router in `loop.py` must keep working with no LLM configured.
+
+### 10. Deterministic first, LLM optional
+
+Matching (`matching/fit.py`), tailoring (`tailoring/engine.py`), cover letters and interview banks produce useful output with no provider. LLM output is only accepted after `verify_rewrite` / `verify_cover_letter` (no new skills, numbers or employers). `ai.providers.get_configured_llm()` returns `None` when the provider has no credentials — callers must handle that.
+
 ## Testing policy
 
 Every Django app ships unit tests under `<app>/tests/test_*.py` in the same commit as the code. Pytest config auto-discovers them. Tests must not require external network — adapters use injectable HTTP clients (`httpx.MockTransport`), LLM-using code uses injectable `llm=` callables, and the Google OAuth view has a `provider_factory` injection point used by `accounts/tests/test_oauth.py`. Frontend tests live under `frontend/src/**/__tests__/` and run via `vitest`.

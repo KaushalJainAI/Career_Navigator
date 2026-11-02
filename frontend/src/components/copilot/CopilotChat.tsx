@@ -1,3 +1,4 @@
+import { RichText } from './RichText';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Loader2, Plus, Send } from 'lucide-react';
@@ -330,7 +331,7 @@ export function CopilotChat({ variant }: { variant: 'panel' | 'page' }) {
           return (
             <div key={m.key} className="flex justify-start">
               <div className="max-w-[90%] rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                <div className="whitespace-pre-line text-sm leading-relaxed text-slate-900">{m.content}</div>
+                <RichText text={m.content} />
                 <StepLine steps={m.steps} />
                 <UiLinks ui={m.ui} />
                 {p && (

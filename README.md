@@ -6,22 +6,37 @@ Patterned on the AIAAS Django/Channels/Celery + React/Zustand stack and Faultlin
 
 > 📖 **New here? Start with [docs/vision.md](docs/vision.md)** for the *why*, then [docs/architecture.md](docs/architecture.md) for the *how*.
 
-## Features
+## What it does
 
-| Area | What ships | Status |
+A job-search co-pilot built for people applying to many companies at once — especially **freshers handling campus placements and off-campus applications**. It works fully **without any AI key**; plug in your own Claude / ChatGPT / Gemini subscription to make the assistant conversational.
+
+| Step | What you get |
+|---|---|
+| **1. Résumé → profile** | Upload a PDF/DOCX or paste text. Name, contact, education (with CGPA), internships, projects and 200+ skills are extracted and fill your profile; target roles are suggested. |
+| **2. Ranked jobs** | "Find jobs" searches public company boards (Greenhouse, Lever) and job APIs (Remotive, Arbeitnow, plus Adzuna/Jooble/JSearch if keyed). Add campus drives or referrals by link (Greenhouse/Lever/Ashby) or paste. Every job gets a 0–100 fit with reasons: skills you have/miss, title & seniority, years asked, location, **CGPA cutoff and batch eligibility**, ghost-job risk. |
+| **3. Truthful tailoring** | Per-job résumé that reorders your real skills, bullets and projects and writes a factual summary — never invents. Keyword coverage, gaps as suggestions, editable, ATS-safe .docx/.txt export. Factual cover letter. Optional AI polish passes a fail-closed verifier (no new skills, numbers or employers). |
+| **4. Pipeline** | Saved → Applied → **Online assessment** → Interviewing → Final/HR → Offer. Deadlines, next-round dates, notes, follow-up nudges. |
+| **5. Today** | A plan built from real state: deadlines closing soon, upcoming OAs/interviews, follow-ups due, unfinished applications, strong matches, weekly goal. No made-up numbers. |
+| **6. Practice** | Interview rounds generated from the job description and your résumé (skills, gaps, projects), plus HR and CS-fundamentals rounds. STAR feedback per answer, off-topic detection, study plan. |
+| **7. Assistant** | A chat copilot that drives the app: "I got an OA from TCS on Friday 10am", "tailor my résumé for Zoho", "add contact Riya, SDE at Google", "draft a referral message". Changes to your records need one-click approval; it never applies or messages anyone for you. |
+| **8. Claude Code plugin** | Manage your search from Claude Code with your own subscription — see [integrations/claude-code-plugin](integrations/claude-code-plugin/). |
+
+### Bring your own AI subscription
+
+Self-hosting? Log into a CLI on the backend machine and set `AI_PROVIDER` in `backend/.env`:
+
+| Subscription | Log in | Setting |
 |---|---|---|
-| **Discovery** | Unified ingestion from aggregator APIs (Adzuna, Jooble, JSearch), ATS APIs (Greenhouse, Lever), JobSpy-wrapped big boards, email forwards, and one-click extension capture from any careers page | Adapters live; JobSpy + capture planned (Phase 2) |
-| **Ghost-Job Shield** | Repost fingerprinting, staleness tracking, missing-salary heuristics → ghost-risk score on every job card; auto-apply deprioritizes high-risk postings | Planned (Phase 2 flagship) |
-| **Matching** | Lexical + skill-overlap resume↔JD scoring; already emits a missing-skill `gaps` list, with richer matched/missing-keyword explanation, UI rendering, and a direct feed into tailoring planned | Scoring + gaps live; full explainability planned |
-| **Tailoring** | Per-JD resume + cover-letter generation with audit-trail diffs and a deterministic truthfulness verification pass (identity fields and claimed skills must match the profile — fails closed) | Generation live; verification pass planned |
-| **ATS-safe export** | JSON resume schema → single-column server-rendered templates → round-trip parse test | Planned (Phase 2) |
-| **Tiered apply** | `assist` (human submits) → `autofill` (extension fills, never overwrites user input) → `autonomous` (agent submits, hard-gated on a per-application approval token) | Live |
-| **Tracking & analytics** | Applications Kanban + outcome-first dashboard: response rate per resume variant, time-to-first-interview, stage conversion — never "applications sent" as the headline | Kanban live; analytics planned |
-| **Interview Grill Agent** | Company-researched question banks, live grilling rounds with STAR-rubric evaluation, persisted post-session reports + study plans; voice mode in Phase 3. Preparation only — no live-interview copilot | Text mode live |
-| **Stealth mode** | Employer domains filtered from every list endpoint at the query level | Live |
-| **Trust** | Encrypted credentials vault, HITL hard-gate on submission (test-enforced), BYOK/local-model option, honest billing (self-serve cancel, rolling credits) | Vault + gate live; billing planned |
+| Claude (Pro/Max) | `claude` then `/login` | `AI_PROVIDER=claude_cli` |
+| ChatGPT | `codex login` | `AI_PROVIDER=codex_cli` |
+| Google | `gemini` | `AI_PROVIDER=gemini_cli` |
+| Any of the above | — | `AI_PROVIDER=auto` |
 
-How these choices position us against AIHawk, JobSpy, Resume-Matcher, Reactive-Resume, ApplyPilot, Teal/Huntr/Simplify/Careerflow, and Final Round AI — and the user-reported shortcomings of each we engineer against — is documented in [docs/competitive-landscape.md](docs/competitive-landscape.md).
+Settings → **AI engine** shows what is active. With no provider the app runs in deterministic mode.
+
+### The copilot agent
+
+`backend/agent/copilot/` — a small, user-scoped tool set (search/rank jobs, add/save jobs, tailor, cover letter, pipeline updates, targets, skills, contacts, referral drafts, practice, navigate) driven by an AIAAS-style plan → act → observe loop with a `--- PRIOR STEPS ---` trajectory (max 5 steps per turn). Tools are `read`, `draft` or `confirm`; `confirm` tools pause the loop until you approve the exact change. Without an LLM, a deterministic intent router maps everyday phrasing onto the same tools. The same tools are exposed over MCP for the Claude Code plugin.
 
 ## Documentation
 
@@ -69,7 +84,7 @@ npm install
 npm run dev
 ```
 
-Visit `http://localhost:5173`. Full setup notes, env reference, and troubleshooting in [docs/development.md](docs/development.md).
+Visit `http://localhost:5173`. No internet access to job boards (e.g. behind a firewall)? Load demo postings with `python manage.py load_sample_jobs` (remove with `--clear`). Full setup notes, env reference, and troubleshooting in [docs/development.md](docs/development.md).
 
 ## Quick start (Docker)
 

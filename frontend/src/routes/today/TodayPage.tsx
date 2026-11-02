@@ -178,7 +178,7 @@ export function TodayPage() {
         </Card>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-5">
+      <div className="grid gap-5 lg:grid-cols-5 [&>*]:min-w-0">
         <Card className="lg:col-span-3">
           <h2 className="text-lg font-bold text-slate-950">Next steps</h2>
           {steps.length === 0 ? (
@@ -202,7 +202,7 @@ export function TodayPage() {
                       <Icon className="h-4 w-4" aria-hidden />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-slate-950">{step.title}</p>
+                      <p className="break-words font-semibold text-slate-950">{step.title}</p>
                       {step.detail && <p className="mt-0.5 text-sm text-slate-600">{step.detail}</p>}
                       <div className="mt-3 flex flex-wrap gap-2">
                         {isFollowUp ? (

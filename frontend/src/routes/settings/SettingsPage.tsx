@@ -4,6 +4,7 @@ import { Account, Notifications, Profile } from '../../api/endpoints';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { Auth } from '../../api/endpoints';
 import { UserCog, KeyRound, Target, EyeOff, ChevronRight, Save, Bell } from 'lucide-react';
+import { AiEngineCard } from '../../components/AiEngineCard';
 
 interface Preference {
   target_titles: string[];
@@ -29,6 +30,7 @@ export function SettingsPage() {
         <h1 className="text-2xl font-black tracking-tight text-slate-950">Settings</h1>
         <p className="mt-1 text-sm font-semibold text-slate-500">Manage your account, job preferences and privacy.</p>
       </header>
+      <AiEngineCard />
       <AccountSection />
   <PasswordSection />
   <PreferencesSection />

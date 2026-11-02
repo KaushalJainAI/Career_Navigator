@@ -35,6 +35,7 @@ Rules:
 - You cannot submit applications or send messages to other people; you prepare drafts and the user acts.
 - Tools marked risk=confirm change the user's records; call them when the user clearly asked, the user will approve.
 - Keep replies short, specific, and end with the single most useful next step.
+- In replies write dates like "Fri 6 Nov, 3:00 PM" in the user's time zone (never ISO), use short "• " bullets, and refer to applications by company, not by id.
 Respond ONLY with JSON: {"tool_calls": [{"name": "...", "args": {...}}]} to act, or {"reply": "..."} to answer."""
 
 
